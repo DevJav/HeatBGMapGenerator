@@ -273,6 +273,35 @@ class TrackEditor {
         group.appendChild(trackPath);
     }
 
+    // Helper method to create speed limit text element
+    createSpeedLimitText(segment, group = null) {
+        const speedText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        speedText.setAttribute('id', `speed-text-${segment.segment_number}`);
+        speedText.setAttribute('x', segment.center_point[0] + 20);
+        speedText.setAttribute('y', segment.center_point[1]);
+        speedText.setAttribute('text-anchor', 'middle');
+        speedText.setAttribute('dominant-baseline', 'middle');
+        speedText.setAttribute('fill', 'yellow');
+        speedText.setAttribute('font-size', '64');
+        speedText.setAttribute('font-weight', 'bold');
+        speedText.setAttribute('stroke', 'black');
+        speedText.setAttribute('stroke-width', '0.5');
+        speedText.setAttribute('class', 'speed-limit-text');
+        speedText.style.pointerEvents = 'none';
+        speedText.textContent = segment.speed_limit;
+        
+        if (group) {
+            group.appendChild(speedText);
+        }
+        
+        return speedText;
+    }
+
+    // Helper method to get stroke width for segments
+    getSegmentStrokeWidth(isCurve) {
+        return isCurve ? '25' : '8';
+    }
+
     renderTrackBorders(group) {
         // Left border
         const leftPath = this.createPathFromPoints(this.trackData.left_border);
@@ -301,19 +330,36 @@ class TrackEditor {
 
     renderSegmentDivisions(group) {
         this.trackData.segments.forEach(segment => {
+            // Create the visible segment line
             const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
             line.setAttribute('x1', segment.line_start[0]);
             line.setAttribute('y1', segment.line_start[1]);
             line.setAttribute('x2', segment.line_end[0]);
             line.setAttribute('y2', segment.line_end[1]);
-            line.setAttribute('stroke', segment.is_curve ? 'red' : 'white');
-            line.setAttribute('stroke-width', '8');
+            line.setAttribute('stroke', 'white');
+            line.setAttribute('stroke-width', this.getSegmentStrokeWidth(segment.is_curve));
             line.setAttribute('opacity', '1');
-            line.setAttribute('class', 'segment-line');
+            line.setAttribute('class', 'segment-line-visual');
             line.setAttribute('data-segment-id', segment.segment_number);
-            line.style.cursor = this.currentMode === 'edit' ? 'move' : 'default';
+            line.style.pointerEvents = 'none'; // Disable pointer events on visual line
             
             group.appendChild(line);
+
+            // Create an invisible wider line for easier selection
+            const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            hitArea.setAttribute('x1', segment.line_start[0]);
+            hitArea.setAttribute('y1', segment.line_start[1]);
+            hitArea.setAttribute('x2', segment.line_end[0]);
+            hitArea.setAttribute('y2', segment.line_end[1]);
+            hitArea.setAttribute('stroke', 'transparent');
+            hitArea.setAttribute('stroke-width', '25'); // Much wider for easier clicking
+            hitArea.setAttribute('opacity', '0');
+            hitArea.setAttribute('class', 'segment-line');
+            hitArea.setAttribute('data-segment-id', segment.segment_number);
+            hitArea.style.cursor = this.currentMode === 'edit' ? 'move' : 
+                                  this.currentMode === 'curve' ? 'pointer' : 'default';
+            
+            group.appendChild(hitArea);
 
             // Add segment number
             const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -327,24 +373,16 @@ class TrackEditor {
             text.setAttribute('class', 'segment-number');
             text.setAttribute('stroke', 'black');
             text.setAttribute('stroke-width', '0.5');
+            text.setAttribute('data-segment-id', segment.segment_number);
+            text.style.pointerEvents = 'none'; // Prevent text from blocking clicks
             text.textContent = segment.segment_number;
             
-            if (segment.is_curve) {
-                // Add speed limit indicator
-                const speedText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                speedText.setAttribute('x', segment.center_point[0]);
-                speedText.setAttribute('y', segment.center_point[1] + 18);
-                speedText.setAttribute('text-anchor', 'middle');
-                speedText.setAttribute('fill', 'red');
-                speedText.setAttribute('font-size', '10');
-                speedText.setAttribute('font-weight', 'bold');
-                speedText.setAttribute('stroke', 'white');
-                speedText.setAttribute('stroke-width', '0.3');
-                speedText.textContent = `Max: ${segment.speed_limit}`;
-                group.appendChild(speedText);
-            }
-            
             group.appendChild(text);
+            
+            // Add speed limit text for curves
+            if (segment.is_curve && segment.speed_limit) {
+                this.createSpeedLimitText(segment, group);
+            }
         });
     }
 
@@ -485,13 +523,65 @@ class TrackEditor {
     handleCurveSelection(element) {
         const segmentId = parseInt(element.getAttribute('data-segment-id'));
         
-        this.curveSelection.push(segmentId);
-        element.setAttribute('stroke', 'orange');
+        // Find the segment in our data
+        const segment = this.trackData.segments.find(s => s.segment_number === segmentId);
+        if (!segment) return;
         
-        if (this.curveSelection.length === 2) {
-            const [start, end] = this.curveSelection.sort((a, b) => a - b);
-            this.markCurveRange(start, end);
-            this.curveSelection = [];
+        // Toggle curve status
+        const wasCurve = segment.is_curve || false;
+        segment.is_curve = !wasCurve;
+        
+        if (segment.is_curve) {
+            // Set default speed limit if not already set
+            segment.speed_limit = segment.speed_limit || parseInt(document.getElementById('speedLimit').value);
+        }
+        
+        // Update the visual representation
+        this.updateSegmentVisual(segmentId, segment);
+        
+        this.showStatus(`Segment ${segmentId} ${segment.is_curve ? 'marked as curve' : 'unmarked as curve'}`, 'success');
+    }
+
+    updateSegmentVisual(segmentId, segment) {
+        /**
+         * Update the visual representation of a segment (curve vs normal)
+         */
+        const svg = document.getElementById('trackCanvas');
+        const trackGroup = svg.querySelector('#trackGroup');
+        
+        if (!trackGroup) return;
+        
+        // Find the visual line
+        const visualLine = trackGroup.querySelector(`[data-segment-id="${segmentId}"].segment-line-visual`);
+        const speedTextId = `speed-text-${segmentId}`;
+        let speedText = trackGroup.querySelector(`#${speedTextId}`);
+        
+        if (visualLine) {
+            if (segment.is_curve) {
+                // Make it thicker for curves but keep white color
+                visualLine.setAttribute('stroke-width', this.getSegmentStrokeWidth(true));
+                visualLine.setAttribute('stroke', 'white');
+                
+                // Add speed limit text if it doesn't exist
+                if (!speedText) {
+                    speedText = this.createSpeedLimitText(segment, trackGroup);
+                } else {
+                    // Update existing text position and content
+                    speedText.setAttribute('x', segment.center_point[0] + 20);
+                    speedText.setAttribute('y', segment.center_point[1]);
+                    speedText.textContent = segment.speed_limit;
+                }
+                
+            } else {
+                // Normal segment - thinner line
+                visualLine.setAttribute('stroke-width', this.getSegmentStrokeWidth(false));
+                visualLine.setAttribute('stroke', 'white');
+                
+                // Remove speed limit text if it exists
+                if (speedText) {
+                    speedText.remove();
+                }
+            }
         }
     }
 
