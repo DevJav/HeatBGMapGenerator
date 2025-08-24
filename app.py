@@ -24,10 +24,75 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 # Store track generators per session (in production, use Redis or database)
 track_generators = {}
 
+# File to store last track data
+LAST_TRACK_FILE = 'last_track_data.json'
+
+def save_track_data(track_data, filename, session_id):
+    """Save track data to file for persistence"""
+    try:
+        save_data = {
+            'track_data': track_data,
+            'filename': filename,
+            'session_id': session_id,
+            'timestamp': json.dumps({"timestamp": "auto"})  # You could add actual timestamp
+        }
+        
+        with open(LAST_TRACK_FILE, 'w') as f:
+            json.dump(save_data, f)
+        print(f"Track data saved to {LAST_TRACK_FILE}")
+    except Exception as e:
+        print(f"Error saving track data: {e}")
+
+def load_track_data():
+    """Load the last track data from file"""
+    try:
+        if os.path.exists(LAST_TRACK_FILE):
+            with open(LAST_TRACK_FILE, 'r') as f:
+                data = json.load(f)
+            print(f"Track data loaded from {LAST_TRACK_FILE}")
+            return data
+    except Exception as e:
+        print(f"Error loading track data: {e}")
+    return None
+
 @app.route('/')
 def index():
     """Main page with the track editor interface"""
     return render_template('index.html')
+
+@app.route('/api/last-track', methods=['GET'])
+def get_last_track():
+    """Get the last generated track data"""
+    try:
+        last_data = load_track_data()
+        if last_data:
+            # Check if the SVG file still exists
+            filename = last_data.get('filename')
+            if filename:
+                svg_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                if os.path.exists(svg_path):
+                    return jsonify({
+                        'success': True,
+                        'has_track': True,
+                        'track_data': last_data['track_data'],
+                        'filename': filename,
+                        'session_id': last_data['session_id']
+                    })
+                else:
+                    return jsonify({
+                        'success': True,
+                        'has_track': False,
+                        'message': 'SVG file no longer exists'
+                    })
+            
+        return jsonify({
+            'success': True,
+            'has_track': False,
+            'message': 'No previous track found'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/upload', methods=['POST'])
 def upload_svg():
@@ -96,6 +161,9 @@ def generate_track():
             'track_width': track_width,
             'segment_length': segment_length
         }
+        
+        # Save track data for persistence
+        save_track_data(track_data, filename, session_id)
         
         return jsonify({
             'success': True,

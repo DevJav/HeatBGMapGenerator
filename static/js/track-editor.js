@@ -16,6 +16,7 @@ class TrackEditor {
         
         this.initializeEventListeners();
         this.setupSVGInteraction();
+        this.loadLastTrack(); // Check for and load previous track
     }
 
     initializeEventListeners() {
@@ -108,6 +109,41 @@ class TrackEditor {
         }
 
         this.showLoading(false);
+    }
+
+    async loadLastTrack() {
+        /**
+         * Load the last generated track on page load
+         */
+        try {
+            const response = await fetch('/api/last-track');
+            const result = await response.json();
+            
+            if (result.success && result.has_track) {
+                // Restore track data
+                this.trackData = result.track_data;
+                this.sessionId = result.session_id;
+                
+                // Update UI
+                document.getElementById('fileName').textContent = `📄 ${result.filename}`;
+                document.getElementById('generateBtn').disabled = false;
+                
+                // Update settings from saved data
+                document.getElementById('trackWidth').value = result.track_data.track_width;
+                document.getElementById('segmentLength').value = result.track_data.segment_length;
+                
+                // Render the track
+                this.renderTrack();
+                
+                // this.showStatus('Previous track loaded successfully!', 'success');
+                console.log('Loaded previous track data');
+            } else {
+                console.log('No previous track found or file missing');
+            }
+        } catch (error) {
+            console.log('Error loading previous track:', error);
+            // Don't show error to user since this is just a convenience feature
+        }
     }
 
     async generateTrack() {
@@ -272,7 +308,6 @@ class TrackEditor {
             line.setAttribute('y2', segment.line_end[1]);
             line.setAttribute('stroke', segment.is_curve ? 'red' : 'white');
             line.setAttribute('stroke-width', '8');
-            // line.setAttribute('stroke-dasharray', '8,4');
             line.setAttribute('opacity', '1');
             line.setAttribute('class', 'segment-line');
             line.setAttribute('data-segment-id', segment.segment_number);

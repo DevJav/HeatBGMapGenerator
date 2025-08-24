@@ -215,7 +215,7 @@ class HeatTrackGenerator:
                         perpendicular = np.array([-direction[1], direction[0]])
                         
                         # Create perpendicular line across track width
-                        half_width = self.track_width / 2 * 1.2  # Extend slightly beyond borders
+                        half_width = self.track_width / 2  # Match exactly with track borders
                         line_start = center_point - perpendicular * half_width
                         line_end = center_point + perpendicular * half_width
                         
