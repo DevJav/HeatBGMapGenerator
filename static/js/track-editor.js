@@ -14,6 +14,21 @@ class TrackEditor {
         this.panX = 0;
         this.panY = 0;
         
+        // Default visual settings
+        this.defaultSettings = {
+            segmentNumberSize: 12,
+            speedLimitSize: 64,
+            normalSegmentWidth: 8,
+            curveSegmentWidth: 25,
+            borderWidth: 5,
+            centerlineWidth: 10,
+            dashLength: 25,
+            gapLength: 25
+        };
+        
+        // Load saved settings or use defaults
+        this.visualSettings = this.loadVisualSettings();
+        
         this.initializeEventListeners();
         this.setupSVGInteraction();
         this.loadLastTrack(); // Check for and load previous track
@@ -44,6 +59,21 @@ class TrackEditor {
         // Settings change listeners
         document.getElementById('trackWidth').addEventListener('change', this.updateSettings.bind(this));
         document.getElementById('segmentLength').addEventListener('change', this.updateSettings.bind(this));
+        
+        // Visual settings listeners
+        document.getElementById('segmentNumberSize').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('speedLimitSize').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('normalSegmentWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('curveSegmentWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('borderWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('centerlineWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('dashLength').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('gapLength').addEventListener('change', this.onVisualSettingChange.bind(this));
+        
+        // Settings buttons
+        document.getElementById('saveSettings').addEventListener('click', this.saveVisualSettings.bind(this));
+        document.getElementById('loadSettings').addEventListener('click', this.loadAndApplySettings.bind(this));
+        document.getElementById('resetSettings').addEventListener('click', this.resetToDefaultSettings.bind(this));
     }
 
     setupSVGInteraction() {
@@ -282,7 +312,7 @@ class TrackEditor {
         speedText.setAttribute('text-anchor', 'middle');
         speedText.setAttribute('dominant-baseline', 'middle');
         speedText.setAttribute('fill', 'yellow');
-        speedText.setAttribute('font-size', '64');
+        speedText.setAttribute('font-size', this.visualSettings.speedLimitSize);
         speedText.setAttribute('font-weight', 'bold');
         speedText.setAttribute('stroke', 'black');
         speedText.setAttribute('stroke-width', '0.5');
@@ -299,21 +329,73 @@ class TrackEditor {
 
     // Helper method to get stroke width for segments
     getSegmentStrokeWidth(isCurve) {
-        return isCurve ? '25' : '8';
+        return isCurve ? this.visualSettings.curveSegmentWidth : this.visualSettings.normalSegmentWidth;
+    }
+
+    // Visual Settings Management
+    loadVisualSettings() {
+        const saved = localStorage.getItem('heatTrackVisualSettings');
+        const settings = saved ? JSON.parse(saved) : { ...this.defaultSettings };
+        this.applySettingsToUI(settings);
+        return settings;
+    }
+
+    applySettingsToUI(settings) {
+        document.getElementById('segmentNumberSize').value = settings.segmentNumberSize;
+        document.getElementById('speedLimitSize').value = settings.speedLimitSize;
+        document.getElementById('normalSegmentWidth').value = settings.normalSegmentWidth;
+        document.getElementById('curveSegmentWidth').value = settings.curveSegmentWidth;
+        document.getElementById('borderWidth').value = settings.borderWidth;
+        document.getElementById('centerlineWidth').value = settings.centerlineWidth;
+        document.getElementById('dashLength').value = settings.dashLength;
+        document.getElementById('gapLength').value = settings.gapLength;
+    }
+
+    saveVisualSettings() {
+        localStorage.setItem('heatTrackVisualSettings', JSON.stringify(this.visualSettings));
+        this.showStatus('Settings saved successfully!', 'success');
+    }
+
+    loadAndApplySettings() {
+        this.visualSettings = this.loadVisualSettings();
+        if (this.trackData) {
+            this.renderTrack();
+        }
+        this.showStatus('Settings loaded and applied!', 'success');
+    }
+
+    resetToDefaultSettings() {
+        this.visualSettings = { ...this.defaultSettings };
+        this.applySettingsToUI(this.visualSettings);
+        if (this.trackData) {
+            this.renderTrack();
+        }
+        this.showStatus('Settings reset to default!', 'success');
+    }
+
+    onVisualSettingChange(e) {
+        const settingName = e.target.id;
+        const value = parseInt(e.target.value);
+        this.visualSettings[settingName] = value;
+        
+        // Auto-render track with new settings
+        if (this.trackData) {
+            this.renderTrack();
+        }
     }
 
     renderTrackBorders(group) {
         // Left border
         const leftPath = this.createPathFromPoints(this.trackData.left_border);
         leftPath.setAttribute('stroke', 'white');
-        leftPath.setAttribute('stroke-width', '5');
+        leftPath.setAttribute('stroke-width', this.visualSettings.borderWidth);
         leftPath.setAttribute('fill', 'none');
         group.appendChild(leftPath);
 
         // Right border
         const rightPath = this.createPathFromPoints(this.trackData.right_border);
         rightPath.setAttribute('stroke', 'white');
-        rightPath.setAttribute('stroke-width', '5');
+        rightPath.setAttribute('stroke-width', this.visualSettings.borderWidth);
         rightPath.setAttribute('fill', 'none');
         group.appendChild(rightPath);
     }
@@ -321,8 +403,8 @@ class TrackEditor {
     renderCenterline(group) {
         const centerPath = this.createPathFromPoints(this.trackData.centerline);
         centerPath.setAttribute('stroke', 'white');
-        centerPath.setAttribute('stroke-width', '10');
-        centerPath.setAttribute('stroke-dasharray', '25 25');
+        centerPath.setAttribute('stroke-width', this.visualSettings.centerlineWidth);
+        centerPath.setAttribute('stroke-dasharray', `${this.visualSettings.dashLength} ${this.visualSettings.gapLength}`);
         centerPath.setAttribute('fill', 'none');
         centerPath.setAttribute('opacity', '1');
         group.appendChild(centerPath);
@@ -368,7 +450,7 @@ class TrackEditor {
             text.setAttribute('text-anchor', 'middle');
             text.setAttribute('dominant-baseline', 'middle');
             text.setAttribute('fill', 'white');
-            text.setAttribute('font-size', '12');
+            text.setAttribute('font-size', this.visualSettings.segmentNumberSize);
             text.setAttribute('font-weight', 'bold');
             text.setAttribute('class', 'segment-number');
             text.setAttribute('stroke', 'black');
@@ -566,9 +648,10 @@ class TrackEditor {
                 if (!speedText) {
                     speedText = this.createSpeedLimitText(segment, trackGroup);
                 } else {
-                    // Update existing text position and content
+                    // Update existing text position, content, and font size
                     speedText.setAttribute('x', segment.center_point[0] + 20);
                     speedText.setAttribute('y', segment.center_point[1]);
+                    speedText.setAttribute('font-size', this.visualSettings.speedLimitSize);
                     speedText.textContent = segment.speed_limit;
                 }
                 

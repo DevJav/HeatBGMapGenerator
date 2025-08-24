@@ -231,6 +231,57 @@
             flex: 1;
             min-width: 100px;
         }
+
+        .settings-group {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #764ba2;
+        }
+
+        .settings-group h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .settings-group label {
+            display: block;
+            margin: 8px 0 5px 0;
+            font-size: 12px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .settings-group input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .settings-group input[type="number"]:focus {
+            outline: none;
+            border-color: #764ba2;
+            box-shadow: 0 0 0 2px rgba(118, 75, 162, 0.2);
+        }
+
+        .settings-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .settings-buttons .btn {
+            flex: 1;
+            min-width: 80px;
+            font-size: 12px;
+            padding: 8px 12px;
+        }
     </style>
 </head>
 <body>
@@ -286,6 +337,48 @@
                     <p style="font-size: 12px; color: #666; margin-top: 10px;">
                         Click a segment line to toggle curve marking
                     </p>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>🎨 Visual Settings</h2>
+                <div class="settings-group">
+                    <h3>Text Settings</h3>
+                    <label for="segmentNumberSize">Segment Number Size:</label>
+                    <input type="number" id="segmentNumberSize" min="8" max="20" value="12">
+                    
+                    <label for="speedLimitSize">Speed Limit Size:</label>
+                    <input type="number" id="speedLimitSize" min="20" max="100" value="64">
+                </div>
+                
+                <div class="settings-group">
+                    <h3>Line Settings</h3>
+                    <label for="normalSegmentWidth">Normal Segment Width:</label>
+                    <input type="number" id="normalSegmentWidth" min="1" max="20" value="8">
+                    
+                    <label for="curveSegmentWidth">Curve Segment Width:</label>
+                    <input type="number" id="curveSegmentWidth" min="5" max="50" value="25">
+                    
+                    <label for="borderWidth">Border Width:</label>
+                    <input type="number" id="borderWidth" min="1" max="15" value="5">
+                    
+                    <label for="centerlineWidth">Centerline Width:</label>
+                    <input type="number" id="centerlineWidth" min="3" max="20" value="10">
+                </div>
+                
+                <div class="settings-group">
+                    <h3>Centerline Dash</h3>
+                    <label for="dashLength">Dash Length:</label>
+                    <input type="number" id="dashLength" min="10" max="50" value="25">
+                    
+                    <label for="gapLength">Gap Length:</label>
+                    <input type="number" id="gapLength" min="10" max="50" value="25">
+                </div>
+                
+                <div class="settings-buttons">
+                    <button class="btn btn-secondary" id="saveSettings">💾 Save Settings</button>
+                    <button class="btn btn-secondary" id="loadSettings">📂 Load Settings</button>
+                    <button class="btn btn-secondary" id="resetSettings">🔄 Reset to Default</button>
                 </div>
             </div>
 
