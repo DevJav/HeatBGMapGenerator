@@ -227,6 +227,35 @@ class HeatTrackGenerator:
                             'distance': target_distance
                         })
                     break
+        
+        # Check if the track is closed (last point close to first point)
+        if len(self.centerline_points) > 0:
+            first_point = np.array(self.centerline_points[0])
+            last_point = np.array(self.centerline_points[-1])
+            distance_to_start = np.linalg.norm(last_point - first_point)
+            
+            # If the track is closed (distance < track_width, indicating a loop)
+            if distance_to_start < self.track_width and len(segment_divisions) > 1:
+                # Check distance between last segment and first segment
+                if len(segment_divisions) >= 2:
+                    last_segment = segment_divisions[-1]
+                    first_segment = segment_divisions[0]
+                    
+                    last_center = np.array(last_segment['center_point'])
+                    first_center = np.array(first_segment['center_point'])
+                    
+                    # Calculate distance between last and first segment
+                    segment_distance = np.linalg.norm(last_center - first_center)
+                    
+                    # If the distance is less than the defined segment length, remove the last segment
+                    if segment_distance < self.segment_length:
+                        segment_divisions.pop()
+                        print(f"Removed last segment due to insufficient distance to first segment")
+                        print(f"Distance between last and first: {segment_distance:.2f} < {self.segment_length}")
+        
+        # Re-number segments after potential removal
+        for i, segment in enumerate(segment_divisions):
+            segment['segment_number'] = i + 1
                     
         self.segment_divisions = segment_divisions
         print(f"Created {len(segment_divisions)} segment divisions")
