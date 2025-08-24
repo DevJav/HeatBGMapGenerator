@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heat: Pedal to the Metal - Track Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 350px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #764ba2;
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(118, 75, 162, 0.1);
+        }
+
+        .section h2 {
+            color: #764ba2;
+            font-size: 18px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #764ba2;
+            box-shadow: 0 0 0 3px rgba(118, 75, 162, 0.1);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(118, 75, 162, 0.4);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #ffeaa7 0%, #fab1a0 100%);
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            box-shadow: 0 5px 15px rgba(255, 193, 7, 0.4);
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .toolbar .btn {
+            flex: 1;
+            min-width: 100px;
+        }
+
+        .main-content {
+            flex: 1;
+            position: relative;
+            background: #555;
+        }
+
+        .canvas-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        #trackCanvas {
+            max-width: 100%;
+            max-height: 100%;
+            border: 2px solid #333;
+            background: #555;
+        }
+
+        .status {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            display: none;
+        }
+
+        .status.success {
+            background: #27ae60;
+        }
+
+        .status.error {
+            background: #e74c3c;
+        }
+
+        .loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            z-index: 1000;
+            display: none;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #764ba2;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .file-upload {
+            border: 2px dashed #764ba2;
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: rgba(118, 75, 162, 0.05);
+        }
+
+        .file-upload:hover {
+            border-color: #667eea;
+            background: rgba(118, 75, 162, 0.1);
+        }
+
+        .file-upload.dragover {
+            border-color: #667eea;
+            background: rgba(118, 75, 162, 0.15);
+            transform: scale(1.02);
+        }
+
+        .curve-controls {
+            display: none;
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #764ba2;
+        }
+
+        .curve-mode {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+        }
+
+        .curve-mode:hover {
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+        }
+
+        .settings-group {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #764ba2;
+        }
+
+        .settings-group h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .settings-group label {
+            display: block;
+            margin: 8px 0 5px 0;
+            font-size: 12px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .settings-group input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .settings-group input[type="number"]:focus {
+            outline: none;
+            border-color: #764ba2;
+            box-shadow: 0 0 0 2px rgba(118, 75, 162, 0.2);
+        }
+
+        .settings-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .settings-buttons .btn {
+            flex: 1;
+            min-width: 80px;
+            font-size: 12px;
+            padding: 8px 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="header">
+                <h1>🏁 Heat Track Generator</h1>
+                <p>Create custom racetracks for Heat: Pedal to the Metal</p>
+            </div>
+
+            <div class="section">
+                <h2>📂 SVG File</h2>
+                <div class="file-upload" id="fileUpload">
+                    <p>📎 Click or drag SVG file here</p>
+                    <input type="file" id="fileInput" accept=".svg" style="display: none;">
+                </div>
+                <div id="fileName" style="margin-top: 10px; font-size: 12px; color: #666;"></div>
+            </div>
+
+            <div class="section">
+                <h2>⚙️ Track Settings</h2>
+                <div class="form-group">
+                    <label for="trackWidth">Track Width</label>
+                    <input type="number" id="trackWidth" value="200" min="50" max="500" step="10">
+                </div>
+                <div class="form-group">
+                    <label for="segmentLength">Segment Length</label>
+                    <input type="number" id="segmentLength" value="400" min="100" max="1000" step="50">
+                </div>
+                <button class="btn" id="generateBtn" disabled>🎯 Generate Track</button>
+            </div>
+
+            <div class="section">
+                <h2>🏎️ Track Tools</h2>
+                <div class="toolbar">
+                    <button class="btn btn-secondary" id="panMode">✋ Pan</button>
+                    <button class="btn btn-secondary" id="editMode">✏️ Edit</button>
+                    <button class="btn curve-mode" id="curveMode">🌀 Curves</button>
+                    <button class="btn btn-secondary" id="outlineMode">📏 Track Outline</button>
+                </div>
+                
+                <div class="curve-controls" id="curveControls">
+                    <div class="form-group">
+                        <label for="speedLimit">Speed Limit</label>
+                        <select id="speedLimit">
+                            <option value="1">1 (Hairpin)</option>
+                            <option value="2">2 (Tight)</option>
+                            <option value="3" selected>3 (Medium)</option>
+                            <option value="4">4 (Fast)</option>
+                        </select>
+                    </div>
+                    <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                        Click a segment line to toggle curve marking
+                    </p>
+                </div>
+                
+                <div class="curve-controls" id="outlineControls" style="display: none;">
+                    <div class="form-group">
+                        <label>Track Outline</label>
+                        <p style="font-size: 12px; color: #666; margin: 5px 0;">
+                            Add red & white dashed outline to track borders
+                        </p>
+                    </div>
+                    <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                        Click segment areas to toggle track outline
+                    </p>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>🎨 Visual Settings</h2>
+                <div class="settings-group">
+                    <h3>Text Settings</h3>
+                    <label for="segmentNumberSize">Segment Number Size:</label>
+                    <input type="number" id="segmentNumberSize" min="8" max="20" value="12">
+                    
+                    <label for="speedLimitSize">Speed Limit Size:</label>
+                    <input type="number" id="speedLimitSize" min="20" max="100" value="64">
+                </div>
+                
+                <div class="settings-group">
+                    <h3>Line Settings</h3>
+                    <label for="normalSegmentWidth">Normal Segment Width:</label>
+                    <input type="number" id="normalSegmentWidth" min="1" max="20" value="8">
+                    
+                    <label for="curveSegmentWidth">Curve Segment Width:</label>
+                    <input type="number" id="curveSegmentWidth" min="5" max="50" value="25">
+                    
+                    <label for="borderWidth">Border Width:</label>
+                    <input type="number" id="borderWidth" min="1" max="15" value="5">
+                    
+                    <label for="centerlineWidth">Centerline Width:</label>
+                    <input type="number" id="centerlineWidth" min="3" max="20" value="10">
+                </div>
+                
+                <div class="settings-group">
+                    <h3>Centerline Dash</h3>
+                    <label for="dashLength">Dash Length:</label>
+                    <input type="number" id="dashLength" min="10" max="50" value="25">
+                    
+                    <label for="gapLength">Gap Length:</label>
+                    <input type="number" id="gapLength" min="10" max="50" value="25">
+                </div>
+                
+                <div class="settings-group">
+                    <h3>Track Outline</h3>
+                    <label for="trackOutlineWidth">Outline Width:</label>
+                    <input type="number" id="trackOutlineWidth" min="2" max="15" value="6">
+                    
+                    <label for="trackOutlineDashLength">Outline Dash Length:</label>
+                    <input type="number" id="trackOutlineDashLength" min="5" max="30" value="15">
+                    
+                    <label for="trackOutlineGapLength">Outline Gap Length:</label>
+                    <input type="number" id="trackOutlineGapLength" min="5" max="30" value="10">
+                </div>
+                
+                <div class="settings-buttons">
+                    <button class="btn btn-secondary" id="saveSettings">💾 Save Settings</button>
+                    <button class="btn btn-secondary" id="loadSettings">📂 Load Settings</button>
+                    <button class="btn btn-secondary" id="resetSettings">🔄 Reset to Default</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>💾 Export</h2>
+                <button class="btn btn-secondary" id="exportPNG">📷 Export PNG</button>
+                <button class="btn btn-secondary" id="exportSVG">🖼️ Export SVG</button>
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Processing...</p>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="canvas-container">
+                <svg id="trackCanvas" viewBox="0 0 1000 800" preserveAspectRatio="xMidYMid meet">
+                    <defs>
+                        <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
+                            <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#e0e0e0" stroke-width="1"/>
+                        </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#grid)" />
+                    <text x="50%" y="50%" text-anchor="middle" fill="#ccc" font-size="24" font-family="Arial">
+                        Upload an SVG file to get started
+                    </text>
+                </svg>
+            </div>
+        </div>
+    </div>
+
+    <div class="status" id="status"></div>
+
+    <script>
+        /**
+         * Pure JavaScript Heat Track Generator
+         * Replaces Python backend with client-side track generation
+         */
+        class HeatTrackGenerator {
+            constructor() {
+                this.trackData = null;
+                this.currentMode = 'pan';
+                this.isDragging = false;
+                this.draggedElement = null;
+                this.scale = 1;
+                this.panX = 0;
+                this.panY = 0;
+                
+                // Default visual settings
+                this.defaultSettings = {
+                    segmentNumberSize: 12,
+                    speedLimitSize: 64,
+                    normalSegmentWidth: 8,
+                    curveSegmentWidth: 25,
+                    borderWidth: 5,
+                    centerlineWidth: 10,
+                    dashLength: 25,
+                    gapLength: 25,
+                    trackOutlineWidth: 6,
+                    trackOutlineDashLength: 15,
+                    trackOutlineGapLength: 10
+                };
+                
+                // Load saved settings or use defaults
+                this.visualSettings = this.loadVisualSettings();
+                
+                this.initializeEventListeners();
+                this.setupSVGInteraction();
+            }
+
+            initializeEventListeners() {
+                // File upload
+                const fileUpload = document.getElementById('fileUpload');
+                const fileInput = document.getElementById('fileInput');
+                
+                fileUpload.addEventListener('click', () => fileInput.click());
+                fileUpload.addEventListener('dragover', this.handleDragOver.bind(this));
+                fileUpload.addEventListener('drop', this.handleDrop.bind(this));
+                fileInput.addEventListener('change', this.handleFileSelect.bind(this));
+
+                // Generate button
+                document.getElementById('generateBtn').addEventListener('click', this.generateTrack.bind(this));
+
+                // Mode buttons
+                document.getElementById('panMode').addEventListener('click', () => this.setMode('pan'));
+                document.getElementById('editMode').addEventListener('click', () => this.setMode('edit'));
+                document.getElementById('curveMode').addEventListener('click', () => this.setMode('curve'));
+                document.getElementById('outlineMode').addEventListener('click', () => this.setMode('outline'));
+
+                // Export buttons
+                document.getElementById('exportPNG').addEventListener('click', () => this.exportTrack('png'));
+                document.getElementById('exportSVG').addEventListener('click', () => this.exportTrack('svg'));
+
+                // Settings change listeners
+                document.getElementById('trackWidth').addEventListener('change', this.onSettingChange.bind(this));
+                document.getElementById('segmentLength').addEventListener('change', this.onSettingChange.bind(this));
+                
+                // Visual settings listeners
+                document.getElementById('segmentNumberSize').addEventListener('change', this.onVisualSettingChange.bind(this));
+                document.getElementById('speedLimitSize').addEventListener('change', this.onVisualSettingChange.bind(this));
+                document.getElementById('normalSegmentWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
+                document.getElementById('curveSegmentWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
+                document.getElementById('borderWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
+                document.getElementById('centerlineWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
+                document.getElementById('dashLength').addEventListener('change', this.onVisualSettingChange.bind(this));
+                document.getElementById('gapLength').addEventListener('change', this.onVisualSettingChange.bind(this));
+                document.getElementById('trackOutlineWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
+                document.getElementById('trackOutlineDashLength').addEventListener('change', this.onVisualSettingChange.bind(this));
+                document.getElementById('trackOutlineGapLength').addEventListener('change', this.onVisualSettingChange.bind(this));
+                
+                // Settings buttons
+                document.getElementById('saveSettings').addEventListener('click', this.saveVisualSettings.bind(this));
+                document.getElementById('loadSettings').addEventListener('click', this.loadAndApplySettings.bind(this));
+                document.getElementById('resetSettings').addEventListener('click', this.resetToDefaultSettings.bind(this));
+            }
+
+            setupSVGInteraction() {
+                const svg = document.getElementById('trackCanvas');
+                
+                svg.addEventListener('mousedown', this.handleMouseDown.bind(this));
+                svg.addEventListener('mousemove', this.handleMouseMove.bind(this));
+                svg.addEventListener('mouseup', this.handleMouseUp.bind(this));
+                svg.addEventListener('wheel', this.handleWheel.bind(this));
+            }
+
+            handleDragOver(e) {
+                e.preventDefault();
+                e.currentTarget.classList.add('dragover');
+            }
+
+            handleDrop(e) {
+                e.preventDefault();
+                e.currentTarget.classList.remove('dragover');
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    this.loadSVGFile(files[0]);
+                }
+            }
+
+            handleFileSelect(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    this.loadSVGFile(file);
+                }
+            }
+
+            async loadSVGFile(file) {
+                if (!file.name.toLowerCase().endsWith('.svg')) {
+                    this.showStatus('Please select an SVG file', 'error');
+                    return;
+                }
+
+                try {
+                    const svgContent = await this.readFileAsText(file);
+                    this.parseSVGCenterline(svgContent);
+                    
+                    document.getElementById('fileName').textContent = `📄 ${file.name}`;
+                    document.getElementById('generateBtn').disabled = false;
+                    this.showStatus(`File loaded: ${file.name}`, 'success');
+                } catch (error) {
+                    this.showStatus('Error loading SVG: ' + error.message, 'error');
+                }
+            }
+
+            readFileAsText(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = e => resolve(e.target.result);
+                    reader.onerror = e => reject(new Error('Failed to read file'));
+                    reader.readAsText(file);
+                });
+            }
+
+            parseSVGCenterline(svgContent) {
+                // Parse SVG and extract the first path as centerline
+                const parser = new DOMParser();
+                const svgDoc = parser.parseFromString(svgContent, 'image/svg+xml');
+                const paths = svgDoc.querySelectorAll('path');
+                
+                if (paths.length === 0) {
+                    throw new Error('No paths found in SVG file');
+                }
+
+                // Use the first path as the centerline
+                const path = paths[0];
+                const pathLength = path.getTotalLength();
+                
+                // Sample points along the path
+                const points = [];
+                const numSamples = 1000; // High resolution sampling
+                
+                for (let i = 0; i <= numSamples; i++) {
+                    const distance = (i / numSamples) * pathLength;
+                    const point = path.getPointAtLength(distance);
+                    points.push([point.x, point.y]);
+                }
+                
+                this.centerlinePoints = points;
+                console.log(`Extracted ${points.length} centerline points`);
+                
+                // Show preview of the loaded centerline
+                this.showCenterlinePreview();
+            }
+
+            showCenterlinePreview() {
+                if (!this.centerlinePoints || this.centerlinePoints.length === 0) return;
+
+                const svg = document.getElementById('trackCanvas');
+                
+                // Clear existing content
+                const existingTrack = svg.querySelector('#trackGroup');
+                if (existingTrack) existingTrack.remove();
+                
+                const placeholderText = svg.querySelector('text');
+                if (placeholderText) placeholderText.remove();
+
+                // Create preview group
+                const previewGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                previewGroup.id = 'trackGroup';
+                
+                // Auto-scale and center the preview
+                this.autoScaleAndCenterPreview(previewGroup);
+
+                // Create centerline path for preview
+                const centerPath = this.createPathFromPoints(this.centerlinePoints);
+                centerPath.setAttribute('stroke', '#4CAF50'); // Green color for preview
+                centerPath.setAttribute('stroke-width', '15');
+                centerPath.setAttribute('fill', 'none');
+                previewGroup.appendChild(centerPath);
+                
+                svg.appendChild(previewGroup);
+            }
+
+            autoScaleAndCenterPreview(previewGroup) {
+                const bounds = this.calculateCenterlineBounds();
+                const viewBoxWidth = 1000;
+                const viewBoxHeight = 800;
+                
+                const scaleX = viewBoxWidth / (bounds.maxX - bounds.minX + 100);
+                const scaleY = viewBoxHeight / (bounds.maxY - bounds.minY + 100);
+                this.scale = Math.min(scaleX, scaleY, 2);
+                
+                this.panX = (viewBoxWidth - (bounds.maxX - bounds.minX) * this.scale) / 2 - bounds.minX * this.scale;
+                this.panY = (viewBoxHeight - (bounds.maxY - bounds.minY) * this.scale) / 2 - bounds.minY * this.scale;
+                
+                previewGroup.setAttribute('transform', `translate(${this.panX}, ${this.panY}) scale(${this.scale})`);
+            }
+
+            calculateCenterlineBounds() {
+                if (!this.centerlinePoints || this.centerlinePoints.length === 0) {
+                    return { minX: 0, maxX: 100, minY: 0, maxY: 100, centerX: 50, centerY: 50 };
+                }
+
+                const minX = Math.min(...this.centerlinePoints.map(p => p[0]));
+                const maxX = Math.max(...this.centerlinePoints.map(p => p[0]));
+                const minY = Math.min(...this.centerlinePoints.map(p => p[1]));
+                const maxY = Math.max(...this.centerlinePoints.map(p => p[1]));
+
+                return {
+                    minX, maxX, minY, maxY,
+                    centerX: (minX + maxX) / 2,
+                    centerY: (minY + maxY) / 2
+                };
+            }
+
+            generateTrack() {
+                if (!this.centerlinePoints) {
+                    this.showStatus('Please load an SVG file first', 'error');
+                    return;
+                }
+
+                const trackWidth = parseFloat(document.getElementById('trackWidth').value);
+                const segmentLength = parseFloat(document.getElementById('segmentLength').value);
+
+                this.showLoading(true);
+
+                try {
+                    // Generate track borders
+                    this.generateTrackBorders(trackWidth);
+                    
+                    // Divide track into segments
+                    this.divideTrackIntoSegments(segmentLength);
+                    
+                    // Create track data object
+                    this.trackData = {
+                        centerline: this.centerlinePoints,
+                        left_border: this.leftBorderPoints,
+                        right_border: this.rightBorderPoints,
+                        segments: this.segmentDivisions,
+                        track_width: trackWidth,
+                        segment_length: segmentLength
+                    };
+                    
+                    // Render the track
+                    this.renderTrack();
+                    
+                    this.showStatus('Track generated successfully!', 'success');
+                } catch (error) {
+                    this.showStatus('Generation failed: ' + error.message, 'error');
+                }
+
+                this.showLoading(false);
+            }
+
+            generateTrackBorders(trackWidth) {
+                // Generate parallel offset lines for track borders
+                const offsetDistance = trackWidth / 2;
+                
+                this.leftBorderPoints = this.createParallelLine(this.centerlinePoints, offsetDistance, 'left');
+                this.rightBorderPoints = this.createParallelLine(this.centerlinePoints, offsetDistance, 'right');
+                
+                console.log(`Generated track borders: ${this.leftBorderPoints.length} left, ${this.rightBorderPoints.length} right`);
+            }
+
+            createParallelLine(points, distance, side) {
+                const offsetPoints = [];
+                
+                for (let i = 0; i < points.length; i++) {
+                    let tangent;
+                    
+                    if (i === 0) {
+                        // First point: use direction to next point
+                        tangent = this.normalize([
+                            points[i + 1][0] - points[i][0],
+                            points[i + 1][1] - points[i][1]
+                        ]);
+                    } else if (i === points.length - 1) {
+                        // Last point: use direction from previous point
+                        tangent = this.normalize([
+                            points[i][0] - points[i - 1][0],
+                            points[i][1] - points[i - 1][1]
+                        ]);
+                    } else {
+                        // Middle points: average of incoming and outgoing directions
+                        const incoming = this.normalize([
+                            points[i][0] - points[i - 1][0],
+                            points[i][1] - points[i - 1][1]
+                        ]);
+                        const outgoing = this.normalize([
+                            points[i + 1][0] - points[i][0],
+                            points[i + 1][1] - points[i][1]
+                        ]);
+                        tangent = this.normalize([
+                            (incoming[0] + outgoing[0]) / 2,
+                            (incoming[1] + outgoing[1]) / 2
+                        ]);
+                    }
+                    
+                    // Calculate perpendicular vector
+                    const perpendicular = side === 'left' ? 
+                        [-tangent[1], tangent[0]] : 
+                        [tangent[1], -tangent[0]];
+                    
+                    // Offset the point
+                    const offsetPoint = [
+                        points[i][0] + perpendicular[0] * distance,
+                        points[i][1] + perpendicular[1] * distance
+                    ];
+                    
+                    offsetPoints.push(offsetPoint);
+                }
+                
+                return offsetPoints;
+            }
+
+            normalize(vector) {
+                const length = Math.sqrt(vector[0] * vector[0] + vector[1] * vector[1]);
+                return length > 0 ? [vector[0] / length, vector[1] / length] : [0, 0];
+            }
+
+            divideTrackIntoSegments(segmentLength) {
+                // Calculate cumulative distances along centerline
+                const distances = [0];
+                for (let i = 1; i < this.centerlinePoints.length; i++) {
+                    const prev = this.centerlinePoints[i - 1];
+                    const curr = this.centerlinePoints[i];
+                    const dist = Math.sqrt(
+                        Math.pow(curr[0] - prev[0], 2) + Math.pow(curr[1] - prev[1], 2)
+                    );
+                    distances.push(distances[distances.length - 1] + dist);
+                }
+                
+                const totalLength = distances[distances.length - 1];
+                const numSegments = Math.floor(totalLength / segmentLength);
+                
+                console.log(`Track length: ${totalLength.toFixed(2)} units`);
+                console.log(`Creating ${numSegments} segments of ${segmentLength} units each`);
+                
+                // Find points at segment boundaries
+                const segmentDivisions = [];
+                
+                for (let i = 0; i <= numSegments; i++) {
+                    const targetDistance = i * segmentLength;
+                    
+                    // Find the closest point on centerline
+                    for (let j = 0; j < distances.length - 1; j++) {
+                        if (distances[j] <= targetDistance && targetDistance <= distances[j + 1]) {
+                            // Interpolate between points j and j+1
+                            const t = (targetDistance - distances[j]) / (distances[j + 1] - distances[j]);
+                            
+                            const p1 = this.centerlinePoints[j];
+                            const p2 = this.centerlinePoints[j + 1];
+                            
+                            // Interpolated point on centerline
+                            const centerPoint = [
+                                p1[0] + t * (p2[0] - p1[0]),
+                                p1[1] + t * (p2[1] - p1[1])
+                            ];
+                            
+                            // Calculate direction for perpendicular
+                            const direction = this.normalize([p2[0] - p1[0], p2[1] - p1[1]]);
+                            const perpendicular = [-direction[1], direction[0]];
+                            
+                            // Create perpendicular line across track width
+                            const halfWidth = parseFloat(document.getElementById('trackWidth').value) / 2;
+                            const lineStart = [
+                                centerPoint[0] - perpendicular[0] * halfWidth,
+                                centerPoint[1] - perpendicular[1] * halfWidth
+                            ];
+                            const lineEnd = [
+                                centerPoint[0] + perpendicular[0] * halfWidth,
+                                centerPoint[1] + perpendicular[1] * halfWidth
+                            ];
+                            
+                            segmentDivisions.push({
+                                segment_number: i + 1,
+                                center_point: centerPoint,
+                                line_start: lineStart,
+                                line_end: lineEnd,
+                                distance: targetDistance,
+                                is_curve: false,
+                                speed_limit: 3,
+                                has_track_outline: false
+                            });
+                            break;
+                        }
+                    }
+                }
+                
+                // Check for closed track and remove last segment if too close to first
+                if (segmentDivisions.length > 1) {
+                    const first = segmentDivisions[0];
+                    const last = segmentDivisions[segmentDivisions.length - 1];
+                    const distance = Math.sqrt(
+                        Math.pow(last.center_point[0] - first.center_point[0], 2) +
+                        Math.pow(last.center_point[1] - first.center_point[1], 2)
+                    );
+                    
+                    if (distance < segmentLength) {
+                        segmentDivisions.pop();
+                        console.log(`Removed last segment due to insufficient distance to first segment`);
+                    }
+                }
+                
+                // Re-number segments
+                segmentDivisions.forEach((segment, index) => {
+                    segment.segment_number = index + 1;
+                });
+                
+                this.segmentDivisions = segmentDivisions;
+                console.log(`Created ${segmentDivisions.length} segment divisions`);
+            }
+
+            // ... (Continue with remaining methods in next part)
+            
+            renderTrack() {
+                if (!this.trackData) return;
+
+                const svg = document.getElementById('trackCanvas');
+                
+                // Clear existing track
+                const existingTrack = svg.querySelector('#trackGroup');
+                if (existingTrack) existingTrack.remove();
+                
+                const placeholderText = svg.querySelector('text');
+                if (placeholderText) placeholderText.remove();
+
+                // Create main group
+                const trackGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                trackGroup.id = 'trackGroup';
+                
+                // Auto-scale and center
+                this.autoScaleAndCenter(trackGroup);
+
+                // Render track components
+                this.renderTrackFill(trackGroup);
+                this.renderTrackBorders(trackGroup);
+                this.renderTrackOutlines(trackGroup);
+                this.renderCenterline(trackGroup);
+                this.renderSegmentDivisions(trackGroup);
+
+                svg.appendChild(trackGroup);
+            }
+
+            autoScaleAndCenter(trackGroup) {
+                const bounds = this.calculateBounds();
+                const viewBoxWidth = 1000;
+                const viewBoxHeight = 800;
+                
+                const scaleX = viewBoxWidth / (bounds.maxX - bounds.minX + 100);
+                const scaleY = viewBoxHeight / (bounds.maxY - bounds.minY + 100);
+                this.scale = Math.min(scaleX, scaleY, 2);
+                
+                this.panX = (viewBoxWidth - (bounds.maxX - bounds.minX) * this.scale) / 2 - bounds.minX * this.scale;
+                this.panY = (viewBoxHeight - (bounds.maxY - bounds.minY) * this.scale) / 2 - bounds.minY * this.scale;
+                
+                trackGroup.setAttribute('transform', `translate(${this.panX}, ${this.panY}) scale(${this.scale})`);
+            }
+
+            calculateBounds() {
+                const allPoints = [
+                    ...this.trackData.centerline,
+                    ...this.trackData.left_border,
+                    ...this.trackData.right_border
+                ];
+
+                return {
+                    minX: Math.min(...allPoints.map(p => p[0])),
+                    maxX: Math.max(...allPoints.map(p => p[0])),
+                    minY: Math.min(...allPoints.map(p => p[1])),
+                    maxY: Math.max(...allPoints.map(p => p[1]))
+                };
+            }
+
+            renderTrackFill(group) {
+                const trackPoints = [
+                    ...this.trackData.left_border,
+                    ...this.trackData.right_border.slice().reverse()
+                ];
+
+                const pathData = trackPoints.map((point, index) => 
+                    `${index === 0 ? 'M' : 'L'} ${point[0]} ${point[1]}`
+                ).join(' ') + ' Z';
+
+                const trackPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                trackPath.setAttribute('d', pathData);
+                trackPath.setAttribute('fill', 'black');
+                trackPath.setAttribute('stroke', 'none');
+                
+                group.appendChild(trackPath);
+            }
+
+            renderTrackBorders(group) {
+                // Left border
+                const leftPath = this.createPathFromPoints(this.trackData.left_border);
+                leftPath.setAttribute('stroke', 'white');
+                leftPath.setAttribute('stroke-width', this.visualSettings.borderWidth);
+                leftPath.setAttribute('fill', 'none');
+                group.appendChild(leftPath);
+
+                // Right border
+                const rightPath = this.createPathFromPoints(this.trackData.right_border);
+                rightPath.setAttribute('stroke', 'white');
+                rightPath.setAttribute('stroke-width', this.visualSettings.borderWidth);
+                rightPath.setAttribute('fill', 'none');
+                group.appendChild(rightPath);
+            }
+
+            renderTrackOutlines(group) {
+                // Render red and white dashed outlines for segments marked with outline
+                const outlinedSegments = this.trackData.segments.filter(s => s.has_track_outline);
+                
+                outlinedSegments.forEach(segment => {
+                    this.createTrackOutlineForSegment(segment, group);
+                });
+            }
+
+            renderCenterline(group) {
+                const centerPath = this.createPathFromPoints(this.trackData.centerline);
+                centerPath.setAttribute('stroke', 'white');
+                centerPath.setAttribute('stroke-width', this.visualSettings.centerlineWidth);
+                centerPath.setAttribute('stroke-dasharray', `${this.visualSettings.dashLength} ${this.visualSettings.gapLength}`);
+                centerPath.setAttribute('fill', 'none');
+                centerPath.setAttribute('opacity', '1');
+                group.appendChild(centerPath);
+            }
+
+            renderSegmentDivisions(group) {
+                this.trackData.segments.forEach(segment => {
+                    // Create visible segment line
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', segment.line_start[0]);
+                    line.setAttribute('y1', segment.line_start[1]);
+                    line.setAttribute('x2', segment.line_end[0]);
+                    line.setAttribute('y2', segment.line_end[1]);
+                    line.setAttribute('stroke', 'white');
+                    line.setAttribute('stroke-width', this.getSegmentStrokeWidth(segment.is_curve));
+                    line.setAttribute('opacity', '1');
+                    line.setAttribute('class', 'segment-line-visual');
+                    line.setAttribute('data-segment-id', segment.segment_number);
+                    line.style.pointerEvents = 'none';
+                    group.appendChild(line);
+
+                    // Create invisible hit area for easier selection
+                    const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    hitArea.setAttribute('x1', segment.line_start[0]);
+                    hitArea.setAttribute('y1', segment.line_start[1]);
+                    hitArea.setAttribute('x2', segment.line_end[0]);
+                    hitArea.setAttribute('y2', segment.line_end[1]);
+                    hitArea.setAttribute('stroke', 'transparent');
+                    hitArea.setAttribute('stroke-width', '25');
+                    hitArea.setAttribute('opacity', '0');
+                    hitArea.setAttribute('class', 'segment-line');
+                    hitArea.setAttribute('data-segment-id', segment.segment_number);
+                    hitArea.style.cursor = this.getCursorForMode();
+                    group.appendChild(hitArea);
+
+                    // Add segment number
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    text.setAttribute('x', segment.center_point[0]);
+                    text.setAttribute('y', segment.center_point[1]);
+                    text.setAttribute('text-anchor', 'middle');
+                    text.setAttribute('dominant-baseline', 'middle');
+                    text.setAttribute('fill', 'white');
+                    text.setAttribute('font-size', this.visualSettings.segmentNumberSize);
+                    text.setAttribute('font-weight', 'bold');
+                    text.setAttribute('class', 'segment-number');
+                    text.setAttribute('stroke', 'black');
+                    text.setAttribute('stroke-width', '0.5');
+                    text.style.pointerEvents = 'none';
+                    text.textContent = segment.segment_number;
+                    group.appendChild(text);
+                    
+                    // Add speed limit text for curves
+                    if (segment.is_curve && segment.speed_limit) {
+                        this.createSpeedLimitText(segment, group);
+                    }
+                });
+            }
+
+            createPathFromPoints(points) {
+                const pathData = points.map((point, index) => 
+                    `${index === 0 ? 'M' : 'L'} ${point[0]} ${point[1]}`
+                ).join(' ');
+
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', pathData);
+                return path;
+            }
+
+            createSpeedLimitText(segment, group) {
+                const speedText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                speedText.setAttribute('id', `speed-text-${segment.segment_number}`);
+                speedText.setAttribute('x', segment.center_point[0] + 20);
+                speedText.setAttribute('y', segment.center_point[1]);
+                speedText.setAttribute('text-anchor', 'middle');
+                speedText.setAttribute('dominant-baseline', 'middle');
+                speedText.setAttribute('fill', 'yellow');
+                speedText.setAttribute('font-size', this.visualSettings.speedLimitSize);
+                speedText.setAttribute('font-weight', 'bold');
+                speedText.setAttribute('stroke', 'black');
+                speedText.setAttribute('stroke-width', '0.5');
+                speedText.setAttribute('class', 'speed-limit-text');
+                speedText.style.pointerEvents = 'none';
+                speedText.textContent = segment.speed_limit;
+                group.appendChild(speedText);
+                return speedText;
+            }
+
+            getSegmentStrokeWidth(isCurve) {
+                return isCurve ? this.visualSettings.curveSegmentWidth : this.visualSettings.normalSegmentWidth;
+            }
+
+            getCursorForMode() {
+                switch (this.currentMode) {
+                    case 'edit': return 'move';
+                    case 'curve':
+                    case 'outline': return 'pointer';
+                    default: return 'default';
+                }
+            }
+
+            // Settings management methods
+            loadVisualSettings() {
+                const saved = localStorage.getItem('heatTrackVisualSettings');
+                const settings = saved ? JSON.parse(saved) : { ...this.defaultSettings };
+                this.applySettingsToUI(settings);
+                return settings;
+            }
+
+            applySettingsToUI(settings) {
+                Object.keys(settings).forEach(key => {
+                    const element = document.getElementById(key);
+                    if (element) element.value = settings[key];
+                });
+            }
+
+            saveVisualSettings() {
+                localStorage.setItem('heatTrackVisualSettings', JSON.stringify(this.visualSettings));
+                this.showStatus('Settings saved successfully!', 'success');
+            }
+
+            loadAndApplySettings() {
+                this.visualSettings = this.loadVisualSettings();
+                if (this.trackData) {
+                    this.renderTrack();
+                }
+                this.showStatus('Settings loaded and applied!', 'success');
+            }
+
+            resetToDefaultSettings() {
+                this.visualSettings = { ...this.defaultSettings };
+                this.applySettingsToUI(this.visualSettings);
+                if (this.trackData) {
+                    this.renderTrack();
+                }
+                this.showStatus('Settings reset to default!', 'success');
+            }
+
+            onVisualSettingChange(e) {
+                const settingName = e.target.id;
+                const value = parseInt(e.target.value);
+                this.visualSettings[settingName] = value;
+                
+                if (this.trackData) {
+                    this.renderTrack();
+                }
+            }
+
+            onSettingChange() {
+                if (this.trackData && this.centerlinePoints) {
+                    this.generateTrack();
+                }
+            }
+
+            // Mode and interaction methods
+            setMode(mode) {
+                this.currentMode = mode;
+                
+                // Update button states
+                document.querySelectorAll('.toolbar .btn').forEach(btn => {
+                    btn.style.opacity = '0.7';
+                });
+                document.getElementById(`${mode}Mode`).style.opacity = '1';
+                
+                // Show/hide controls
+                document.getElementById('curveControls').style.display = mode === 'curve' ? 'block' : 'none';
+                document.getElementById('outlineControls').style.display = mode === 'outline' ? 'block' : 'none';
+                
+                // Update cursors
+                const svg = document.getElementById('trackCanvas');
+                svg.style.cursor = mode === 'pan' ? 'grab' : 'crosshair';
+                
+                const segmentLines = svg.querySelectorAll('.segment-line');
+                segmentLines.forEach(line => {
+                    line.style.cursor = this.getCursorForMode();
+                });
+            }
+
+            handleMouseDown(e) {
+                const svg = document.getElementById('trackCanvas');
+                const rect = svg.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                if (this.currentMode === 'curve') {
+                    const element = e.target;
+                    if (element.classList.contains('segment-line')) {
+                        this.handleCurveSelection(element);
+                    }
+                } else if (this.currentMode === 'outline') {
+                    const element = e.target;
+                    if (element.classList.contains('segment-line')) {
+                        this.handleTrackOutlineSelection(element);
+                    }
+                } else if (this.currentMode === 'pan') {
+                    this.isDragging = true;
+                    this.lastPanX = x;
+                    this.lastPanY = y;
+                    svg.style.cursor = 'grabbing';
+                }
+            }
+
+            handleMouseMove(e) {
+                if (!this.isDragging || this.currentMode !== 'pan') return;
+
+                const svg = document.getElementById('trackCanvas');
+                const rect = svg.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                const deltaX = x - this.lastPanX;
+                const deltaY = y - this.lastPanY;
+                
+                this.panX += deltaX;
+                this.panY += deltaY;
+                
+                const trackGroup = svg.querySelector('#trackGroup');
+                if (trackGroup) {
+                    trackGroup.setAttribute('transform', 
+                        `translate(${this.panX}, ${this.panY}) scale(${this.scale})`);
+                }
+                
+                this.lastPanX = x;
+                this.lastPanY = y;
+            }
+
+            handleMouseUp() {
+                this.isDragging = false;
+                const svg = document.getElementById('trackCanvas');
+                svg.style.cursor = this.currentMode === 'pan' ? 'grab' : 'crosshair';
+            }
+
+            handleWheel(e) {
+                e.preventDefault();
+                
+                const svg = document.getElementById('trackCanvas');
+                const rect = svg.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                const scaleFactor = e.deltaY > 0 ? 0.9 : 1.1;
+                const newScale = Math.max(0.1, Math.min(5, this.scale * scaleFactor));
+                
+                const scaleChange = newScale / this.scale;
+                this.panX = x - (x - this.panX) * scaleChange;
+                this.panY = y - (y - this.panY) * scaleChange;
+                this.scale = newScale;
+                
+                const trackGroup = svg.querySelector('#trackGroup');
+                if (trackGroup) {
+                    trackGroup.setAttribute('transform', 
+                        `translate(${this.panX}, ${this.panY}) scale(${this.scale})`);
+                }
+            }
+
+            handleCurveSelection(element) {
+                const segmentId = parseInt(element.getAttribute('data-segment-id'));
+                const segment = this.trackData.segments.find(s => s.segment_number === segmentId);
+                if (!segment) return;
+                
+                segment.is_curve = !segment.is_curve;
+                if (segment.is_curve) {
+                    segment.speed_limit = segment.speed_limit || parseInt(document.getElementById('speedLimit').value);
+                }
+                
+                this.updateSegmentVisual(segmentId, segment);
+                this.showStatus(`Segment ${segmentId} ${segment.is_curve ? 'marked as curve' : 'unmarked as curve'}`, 'success');
+            }
+
+            handleTrackOutlineSelection(element) {
+                const segmentId = parseInt(element.getAttribute('data-segment-id'));
+                const segment = this.trackData.segments.find(s => s.segment_number === segmentId);
+                if (!segment) return;
+                
+                segment.has_track_outline = !segment.has_track_outline;
+                this.renderTrack(); // Re-render to update outlines
+                this.showStatus(`Segment ${segmentId} ${segment.has_track_outline ? 'track outline added' : 'track outline removed'}`, 'success');
+            }
+
+            updateSegmentVisual(segmentId, segment) {
+                const svg = document.getElementById('trackCanvas');
+                const trackGroup = svg.querySelector('#trackGroup');
+                if (!trackGroup) return;
+                
+                const visualLine = trackGroup.querySelector(`[data-segment-id="${segmentId}"].segment-line-visual`);
+                const speedTextId = `speed-text-${segmentId}`;
+                let speedText = trackGroup.querySelector(`#${speedTextId}`);
+                
+                if (visualLine) {
+                    visualLine.setAttribute('stroke-width', this.getSegmentStrokeWidth(segment.is_curve));
+                    
+                    if (segment.is_curve) {
+                        if (!speedText) {
+                            speedText = this.createSpeedLimitText(segment, trackGroup);
+                        } else {
+                            speedText.setAttribute('font-size', this.visualSettings.speedLimitSize);
+                            speedText.textContent = segment.speed_limit;
+                        }
+                    } else {
+                        if (speedText) speedText.remove();
+                    }
+                }
+            }
+
+            createTrackOutlineForSegment(segment, group) {
+                // Create outline on track borders for this segment
+                const segmentProgress = segment.distance || 0;
+                const totalLength = this.calculateTrackLength();
+                const segmentLength = this.trackData.segment_length || 400;
+                
+                const startRatio = segmentProgress / totalLength;
+                const endRatio = Math.min((segmentProgress + segmentLength) / totalLength, 1);
+                
+                const leftBorderSegment = this.getTrackBorderSegment(this.trackData.left_border, startRatio, endRatio);
+                const rightBorderSegment = this.getTrackBorderSegment(this.trackData.right_border, startRatio, endRatio);
+                
+                if (leftBorderSegment.length > 1) {
+                    this.createOutlinePath(leftBorderSegment, `left-outline-${segment.segment_number}`, group);
+                }
+                if (rightBorderSegment.length > 1) {
+                    this.createOutlinePath(rightBorderSegment, `right-outline-${segment.segment_number}`, group);
+                }
+            }
+
+            getTrackBorderSegment(borderPoints, startRatio, endRatio) {
+                const startIndex = Math.floor(startRatio * (borderPoints.length - 1));
+                const endIndex = Math.ceil(endRatio * (borderPoints.length - 1));
+                return borderPoints.slice(startIndex, endIndex + 1);
+            }
+
+            createOutlinePath(points, id, group) {
+                if (points.length < 2) return;
+                
+                const pathData = points.map((point, index) => 
+                    `${index === 0 ? 'M' : 'L'} ${point[0]} ${point[1]}`
+                ).join(' ');
+                
+                // Red dashed outline
+                const redPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                redPath.setAttribute('d', pathData);
+                redPath.setAttribute('stroke', 'red');
+                redPath.setAttribute('stroke-width', this.visualSettings.trackOutlineWidth);
+                redPath.setAttribute('stroke-dasharray', `${this.visualSettings.trackOutlineDashLength} ${this.visualSettings.trackOutlineGapLength}`);
+                redPath.setAttribute('fill', 'none');
+                redPath.setAttribute('opacity', '0.8');
+                redPath.style.pointerEvents = 'none';
+                group.appendChild(redPath);
+                
+                // White dashed outline (offset pattern)
+                const whitePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                whitePath.setAttribute('d', pathData);
+                whitePath.setAttribute('stroke', 'white');
+                whitePath.setAttribute('stroke-width', this.visualSettings.trackOutlineWidth);
+                whitePath.setAttribute('stroke-dasharray', `${this.visualSettings.trackOutlineGapLength} ${this.visualSettings.trackOutlineDashLength}`);
+                whitePath.setAttribute('stroke-dashoffset', this.visualSettings.trackOutlineDashLength);
+                whitePath.setAttribute('fill', 'none');
+                whitePath.setAttribute('opacity', '0.9');
+                whitePath.style.pointerEvents = 'none';
+                group.appendChild(whitePath);
+            }
+
+            calculateTrackLength() {
+                if (!this.trackData || !this.trackData.centerline) return 1000;
+                
+                let length = 0;
+                for (let i = 1; i < this.trackData.centerline.length; i++) {
+                    const prev = this.trackData.centerline[i - 1];
+                    const curr = this.trackData.centerline[i];
+                    const dx = curr[0] - prev[0];
+                    const dy = curr[1] - prev[1];
+                    length += Math.sqrt(dx * dx + dy * dy);
+                }
+                return length;
+            }
+
+            // Export methods
+            exportTrack(format) {
+                if (!this.trackData) {
+                    this.showStatus('No track to export', 'error');
+                    return;
+                }
+
+                const svg = document.getElementById('trackCanvas');
+                
+                if (format === 'svg') {
+                    this.exportSVG(svg);
+                } else if (format === 'png') {
+                    this.exportPNG(svg);
+                }
+            }
+
+            exportSVG(svg) {
+                const svgData = new XMLSerializer().serializeToString(svg);
+                const blob = new Blob([svgData], { type: 'image/svg+xml' });
+                const url = URL.createObjectURL(blob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'heat_track.svg';
+                link.click();
+                
+                URL.revokeObjectURL(url);
+                this.showStatus('Track exported as SVG', 'success');
+            }
+
+            exportPNG(svg) {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                canvas.width = 2000;
+                canvas.height = 1600;
+                
+                const svgData = new XMLSerializer().serializeToString(svg);
+                const img = new Image();
+                
+                img.onload = () => {
+                    ctx.fillStyle = '#555';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    
+                    canvas.toBlob(blob => {
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = 'heat_track.png';
+                        link.click();
+                        URL.revokeObjectURL(url);
+                        this.showStatus('Track exported as PNG', 'success');
+                    });
+                };
+                
+                const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+                const svgUrl = URL.createObjectURL(svgBlob);
+                img.src = svgUrl;
+            }
+
+            // Utility methods
+            showStatus(message, type) {
+                const statusDiv = document.getElementById('status');
+                statusDiv.textContent = message;
+                statusDiv.className = `status ${type}`;
+                statusDiv.style.display = 'block';
+                
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
+
+            showLoading(show) {
+                document.getElementById('loading').style.display = show ? 'block' : 'none';
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new HeatTrackGenerator();
+        });
+    </script>
+</body>
+</html>

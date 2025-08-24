@@ -1,6 +1,0 @@
-Flask==2.3.3
-Werkzeug==2.3.7
-svgpathtools==1.6.1
-shapely==2.0.2
-matplotlib==3.8.2
-numpy==1.26.2
