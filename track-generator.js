@@ -26,9 +26,9 @@ class HeatTrackGenerator {
             centerlineWidth: 10,
             dashLength: 25,
             gapLength: 25,
-            trackOutlineWidth: 6,
-            trackOutlineDashLength: 15,
-            trackOutlineGapLength: 10
+            kerbWidth: 6,
+            kerbDashLength: 15,
+            kerbGapLength: 10
         };
         
         // Load saved settings or use defaults
@@ -55,7 +55,7 @@ class HeatTrackGenerator {
         document.getElementById('panMode').addEventListener('click', () => this.setMode('pan'));
         document.getElementById('editMode').addEventListener('click', () => this.setMode('edit'));
         document.getElementById('curveMode').addEventListener('click', () => this.setMode('curve'));
-        document.getElementById('outlineMode').addEventListener('click', () => this.setMode('outline'));
+        document.getElementById('kerbMode').addEventListener('click', () => this.setMode('kerb'));
 
         // Export buttons
         document.getElementById('exportPNG').addEventListener('click', () => this.exportTrack('png'));
@@ -75,9 +75,9 @@ class HeatTrackGenerator {
         document.getElementById('centerlineWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('dashLength').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('gapLength').addEventListener('change', this.onVisualSettingChange.bind(this));
-        document.getElementById('trackOutlineWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
-        document.getElementById('trackOutlineDashLength').addEventListener('change', this.onVisualSettingChange.bind(this));
-        document.getElementById('trackOutlineGapLength').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('kerbWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('kerbDashLength').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('kerbGapLength').addEventListener('change', this.onVisualSettingChange.bind(this));
         
         // Settings buttons
         document.getElementById('saveSettings').addEventListener('click', this.saveVisualSettings.bind(this));
@@ -446,7 +446,8 @@ class HeatTrackGenerator {
                 distance: targetDistance,
                 is_curve: false,
                 speed_limit: 0,
-                has_track_outline: false
+                has_kerb: false,
+                kerb_side: 'both' // 'left', 'right', or 'both'
             });
         }
         
@@ -524,7 +525,7 @@ class HeatTrackGenerator {
         // Render track components
         this.renderTrackFill(trackGroup);
         this.renderTrackBorders(trackGroup);
-        this.renderTrackOutlines(trackGroup);
+        this.renderKerbs(trackGroup);
         this.renderCenterline(trackGroup);
         this.renderSegmentDivisions(trackGroup);
 
@@ -600,12 +601,12 @@ class HeatTrackGenerator {
         group.appendChild(rightPath);
     }
 
-    renderTrackOutlines(group) {
-        // Render red and white dashed outlines for segments marked with outline
-        const outlinedSegments = this.trackData.segments.filter(s => s.has_track_outline);
+    renderKerbs(group) {
+        // Render red and white striped kerbs for segments marked with kerbs
+        const kerbSegments = this.trackData.segments.filter(s => s.has_kerb);
         
-        outlinedSegments.forEach(segment => {
-            this.createTrackOutlineForSegment(segment, group);
+        kerbSegments.forEach(segment => {
+            this.createKerbForSegment(segment, group);
         });
     }
 
@@ -775,7 +776,7 @@ class HeatTrackGenerator {
         switch (this.currentMode) {
             case 'edit': return 'move';
             case 'curve':
-            case 'outline': return 'pointer';
+            case 'kerb': return 'pointer';
             default: return 'default';
         }
     }
@@ -845,7 +846,7 @@ class HeatTrackGenerator {
         
         // Show/hide controls
         document.getElementById('curveControls').style.display = mode === 'curve' ? 'block' : 'none';
-        document.getElementById('outlineControls').style.display = mode === 'outline' ? 'block' : 'none';
+        document.getElementById('kerbControls').style.display = mode === 'kerb' ? 'block' : 'none';
         document.getElementById('editControls').style.display = mode === 'edit' ? 'block' : 'none';
         
         // Update cursors and pointer events
@@ -883,10 +884,10 @@ class HeatTrackGenerator {
             if (element.classList.contains('segment-line')) {
                 this.handleCurveSelection(element);
             }
-        } else if (this.currentMode === 'outline') {
+        } else if (this.currentMode === 'kerb') {
             const element = e.target;
             if (element.classList.contains('segment-line')) {
-                this.handleTrackOutlineSelection(element);
+                this.handleKerbSelection(element);
             }
         } else if (this.currentMode === 'edit') {
             const element = e.target;
@@ -977,14 +978,41 @@ class HeatTrackGenerator {
         this.showStatus(`Segment ${segmentId} ${segment.is_curve ? 'marked as curve' : 'unmarked as curve'}`, 'success');
     }
 
-    handleTrackOutlineSelection(element) {
+    handleKerbSelection(element) {
         const segmentId = parseInt(element.getAttribute('data-segment-id'));
         const segment = this.trackData.segments.find(s => s.segment_number === segmentId);
         if (!segment) return;
         
-        segment.has_track_outline = !segment.has_track_outline;
-        this.renderTrack(true); // Preserve view when toggling outline
-        this.showStatus(`Segment ${segmentId} ${segment.has_track_outline ? 'track outline added' : 'track outline removed'}`, 'success');
+        if (!segment.has_kerb) {
+            // First click: enable kerbs on both sides
+            segment.has_kerb = true;
+            segment.kerb_side = 'both';
+            this.showStatus(`Segment ${segmentId} kerbs added (both sides)`, 'success');
+        } else {
+            // Cycle through kerb options: both -> left -> right -> off
+            switch (segment.kerb_side) {
+                case 'both':
+                    segment.kerb_side = 'left';
+                    this.showStatus(`Segment ${segmentId} kerbs: left side only`, 'success');
+                    break;
+                case 'left':
+                    segment.kerb_side = 'right';
+                    this.showStatus(`Segment ${segmentId} kerbs: right side only`, 'success');
+                    break;
+                case 'right':
+                    segment.has_kerb = false;
+                    segment.kerb_side = 'both';
+                    this.showStatus(`Segment ${segmentId} kerbs removed`, 'success');
+                    break;
+                default:
+                    segment.has_kerb = false;
+                    segment.kerb_side = 'both';
+                    this.showStatus(`Segment ${segmentId} kerbs removed`, 'success');
+                    break;
+            }
+        }
+        
+        this.renderTrack(true); // Preserve view when toggling kerb
     }
 
     updateSegmentVisual(segmentId, segment) {
@@ -1242,8 +1270,8 @@ class HeatTrackGenerator {
         svg.style.cursor = 'crosshair';
     }
 
-    createTrackOutlineForSegment(segment, group) {
-        // Create outline on track borders for this segment
+    createKerbForSegment(segment, group) {
+        // Create red and white striped kerbs on track borders for this segment
         const segmentProgress = segment.distance || 0;
         const totalLength = this.calculateTrackLength();
         const segmentLength = this.trackData.segment_length || 400;
@@ -1254,11 +1282,12 @@ class HeatTrackGenerator {
         const leftBorderSegment = this.getTrackBorderSegment(this.trackData.left_border, startRatio, endRatio);
         const rightBorderSegment = this.getTrackBorderSegment(this.trackData.right_border, startRatio, endRatio);
         
-        if (leftBorderSegment.length > 1) {
-            this.createOutlinePath(leftBorderSegment, `left-outline-${segment.segment_number}`, group);
+        // Add kerbs based on the selected side
+        if ((segment.kerb_side === 'left' || segment.kerb_side === 'both') && leftBorderSegment.length > 1) {
+            this.createKerbPath(leftBorderSegment, `left-kerb-${segment.segment_number}`, group);
         }
-        if (rightBorderSegment.length > 1) {
-            this.createOutlinePath(rightBorderSegment, `right-outline-${segment.segment_number}`, group);
+        if ((segment.kerb_side === 'right' || segment.kerb_side === 'both') && rightBorderSegment.length > 1) {
+            this.createKerbPath(rightBorderSegment, `right-kerb-${segment.segment_number}`, group);
         }
     }
 
@@ -1268,22 +1297,31 @@ class HeatTrackGenerator {
         return borderPoints.slice(startIndex, endIndex + 1);
     }
 
-    createOutlinePath(points, id, group) {
+    createKerbPath(points, id, group) {
         if (points.length < 2) return;
         
         const pathData = points.map((point, index) => 
             `${index === 0 ? 'M' : 'L'} ${point[0]} ${point[1]}`
         ).join(' ');
         
-        // Red dashed outline
-        const redPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        redPath.setAttribute('d', pathData);
-        redPath.setAttribute('stroke', 'red');
-        redPath.setAttribute('stroke-width', this.visualSettings.trackOutlineWidth);
-        redPath.setAttribute('stroke-dasharray', `${this.visualSettings.trackOutlineDashLength} ${this.visualSettings.trackOutlineGapLength}`);
-        redPath.setAttribute('fill', 'none');
-        redPath.style.pointerEvents = 'none';
-        group.appendChild(redPath);
+        // Create base white kerb stripe
+        const whiteKerbPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        whiteKerbPath.setAttribute('d', pathData);
+        whiteKerbPath.setAttribute('stroke', 'white');
+        whiteKerbPath.setAttribute('stroke-width', this.visualSettings.kerbWidth);
+        whiteKerbPath.setAttribute('fill', 'none');
+        whiteKerbPath.style.pointerEvents = 'none';
+        group.appendChild(whiteKerbPath);
+        
+        // Create red striped pattern on top
+        const redKerbPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        redKerbPath.setAttribute('d', pathData);
+        redKerbPath.setAttribute('stroke', 'red');
+        redKerbPath.setAttribute('stroke-width', this.visualSettings.kerbWidth);
+        redKerbPath.setAttribute('stroke-dasharray', `${this.visualSettings.kerbDashLength} ${this.visualSettings.kerbGapLength}`);
+        redKerbPath.setAttribute('fill', 'none');
+        redKerbPath.style.pointerEvents = 'none';
+        group.appendChild(redKerbPath);
     }
 
     calculateTrackLength() {
