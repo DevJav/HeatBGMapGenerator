@@ -439,23 +439,10 @@ class HeatTrackGenerator {
                 direction[0] = 1; // Default to horizontal direction
             }
             
-            const perpendicular = [-direction[1], direction[0]];
-            
-            // Create perpendicular line across track width
-            const lineStart = [
-                centerPoint[0] - perpendicular[0] * halfWidth,
-                centerPoint[1] - perpendicular[1] * halfWidth
-            ];
-            const lineEnd = [
-                centerPoint[0] + perpendicular[0] * halfWidth,
-                centerPoint[1] + perpendicular[1] * halfWidth
-            ];
-            
             segmentDivisions.push({
                 segment_number: i + 1,
-                center_point: centerPoint,
-                line_start: lineStart,
-                line_end: lineEnd,
+                centerline_index: distanceIndex,
+                interpolation_t: clampedT,
                 distance: targetDistance,
                 is_curve: false,
                 speed_limit: 0,
@@ -467,15 +454,22 @@ class HeatTrackGenerator {
         if (segmentDivisions.length > 1) {
             const first = segmentDivisions[0];
             const last = segmentDivisions[segmentDivisions.length - 1];
-            const distanceToFirst = Math.sqrt(
-                Math.pow(last.center_point[0] - first.center_point[0], 2) +
-                Math.pow(last.center_point[1] - first.center_point[1], 2)
-            );
             
-            const minDistance = segmentLength * MIN_SEGMENT_DISTANCE_RATIO;
-            if (distanceToFirst < minDistance) {
-                segmentDivisions.pop();
-                console.log(`Removed last segment due to insufficient distance (${distanceToFirst.toFixed(2)}) to first segment`);
+            // Calculate center points for distance comparison
+            const firstCenterPoint = this.interpolatePointOnCenterline(first.centerline_index, first.interpolation_t);
+            const lastCenterPoint = this.interpolatePointOnCenterline(last.centerline_index, last.interpolation_t);
+            
+            if (firstCenterPoint && lastCenterPoint) {
+                const distanceToFirst = Math.sqrt(
+                    Math.pow(lastCenterPoint[0] - firstCenterPoint[0], 2) +
+                    Math.pow(lastCenterPoint[1] - firstCenterPoint[1], 2)
+                );
+                
+                const minDistance = segmentLength * MIN_SEGMENT_DISTANCE_RATIO;
+                if (distanceToFirst < minDistance) {
+                    segmentDivisions.pop();
+                    console.log(`Removed last segment due to insufficient distance (${distanceToFirst.toFixed(2)}) to first segment`);
+                }
             }
         }
         
@@ -625,14 +619,78 @@ class HeatTrackGenerator {
         group.appendChild(centerPath);
     }
 
+    interpolatePointOnCenterline(centerlineIndex, t) {
+        if (!this.centerlinePoints || centerlineIndex >= this.centerlinePoints.length - 1) {
+            return null;
+        }
+        
+        const p1 = this.centerlinePoints[centerlineIndex];
+        const p2 = this.centerlinePoints[centerlineIndex + 1];
+        
+        return [
+            p1[0] + t * (p2[0] - p1[0]),
+            p1[1] + t * (p2[1] - p1[1])
+        ];
+    }
+
+    calculateSegmentLineCoordinates(segment) {
+        if (!this.trackData || !this.trackData.centerline) return null;
+        
+        const centerlineIndex = segment.centerline_index;
+        const t = segment.interpolation_t;
+        const halfWidth = (this.trackData.track_width / 2) * this.visualSettings.borderOffset;
+        
+        // Ensure we don't go out of bounds
+        if (centerlineIndex >= this.trackData.centerline.length - 1) {
+            console.warn(`Segment ${segment.segment_number}: centerline index out of bounds`);
+            return null;
+        }
+        
+        const p1 = this.trackData.centerline[centerlineIndex];
+        const p2 = this.trackData.centerline[centerlineIndex + 1];
+        
+        // Interpolated point on centerline
+        const centerPoint = [
+            p1[0] + t * (p2[0] - p1[0]),
+            p1[1] + t * (p2[1] - p1[1])
+        ];
+        
+        // Calculate direction for perpendicular
+        const direction = this.normalize([p2[0] - p1[0], p2[1] - p1[1]]);
+        
+        // Handle case where direction is zero (duplicate points)
+        if (direction[0] === 0 && direction[1] === 0) {
+            console.warn(`Zero direction vector at segment ${segment.segment_number}, using default direction`);
+            direction[0] = 1; // Default to horizontal direction
+        }
+        
+        const perpendicular = [-direction[1], direction[0]];
+        
+        return {
+            center_point: centerPoint,
+            line_start: [
+                centerPoint[0] - perpendicular[0] * halfWidth,
+                centerPoint[1] - perpendicular[1] * halfWidth
+            ],
+            line_end: [
+                centerPoint[0] + perpendicular[0] * halfWidth,
+                centerPoint[1] + perpendicular[1] * halfWidth
+            ]
+        };
+    }
+
     renderSegmentDivisions(group) {
         this.trackData.segments.forEach(segment => {
+            // Calculate line coordinates dynamically
+            const lineCoords = this.calculateSegmentLineCoordinates(segment);
+            if (!lineCoords) return; // Skip if calculation failed
+            
             // Create visible segment line
             const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('x1', segment.line_start[0]);
-            line.setAttribute('y1', segment.line_start[1]);
-            line.setAttribute('x2', segment.line_end[0]);
-            line.setAttribute('y2', segment.line_end[1]);
+            line.setAttribute('x1', lineCoords.line_start[0]);
+            line.setAttribute('y1', lineCoords.line_start[1]);
+            line.setAttribute('x2', lineCoords.line_end[0]);
+            line.setAttribute('y2', lineCoords.line_end[1]);
             line.setAttribute('stroke', 'white');
             line.setAttribute('stroke-width', this.getSegmentStrokeWidth(segment.is_curve));
             line.setAttribute('opacity', '1');
@@ -643,10 +701,10 @@ class HeatTrackGenerator {
 
             // Create invisible hit area for easier selection
             const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            hitArea.setAttribute('x1', segment.line_start[0]);
-            hitArea.setAttribute('y1', segment.line_start[1]);
-            hitArea.setAttribute('x2', segment.line_end[0]);
-            hitArea.setAttribute('y2', segment.line_end[1]);
+            hitArea.setAttribute('x1', lineCoords.line_start[0]);
+            hitArea.setAttribute('y1', lineCoords.line_start[1]);
+            hitArea.setAttribute('x2', lineCoords.line_end[0]);
+            hitArea.setAttribute('y2', lineCoords.line_end[1]);
             hitArea.setAttribute('stroke', 'transparent');
             hitArea.setAttribute('stroke-width', '25');
             hitArea.setAttribute('opacity', '0');
@@ -657,8 +715,8 @@ class HeatTrackGenerator {
 
             // // Add segment number
             // const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            // text.setAttribute('x', segment.center_point[0]);
-            // text.setAttribute('y', segment.center_point[1]);
+            // text.setAttribute('x', lineCoords.center_point[0]);
+            // text.setAttribute('y', lineCoords.center_point[1]);
             // text.setAttribute('text-anchor', 'middle');
             // text.setAttribute('dominant-baseline', 'middle');
             // text.setAttribute('fill', 'white');
@@ -675,7 +733,7 @@ class HeatTrackGenerator {
             
             // Add speed limit text for curves
             if (segment.is_curve && segment.speed_limit) {
-                this.createSpeedLimitText(segment, group);
+                this.createSpeedLimitText(segment, lineCoords.center_point, group);
             }
         });
     }
@@ -690,11 +748,11 @@ class HeatTrackGenerator {
         return path;
     }
 
-    createSpeedLimitText(segment, group) {
+    createSpeedLimitText(segment, centerPoint, group) {
         const speedText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         speedText.setAttribute('id', `speed-text-${segment.segment_number}`);
-        speedText.setAttribute('x', segment.center_point[0] + 20);
-        speedText.setAttribute('y', segment.center_point[1]);
+        speedText.setAttribute('x', centerPoint[0] + 20);
+        speedText.setAttribute('y', centerPoint[1]);
         speedText.setAttribute('text-anchor', 'middle');
         speedText.setAttribute('dominant-baseline', 'middle');
         speedText.setAttribute('fill', 'yellow');
@@ -942,11 +1000,16 @@ class HeatTrackGenerator {
             visualLine.setAttribute('stroke-width', this.getSegmentStrokeWidth(segment.is_curve));
             
             if (segment.is_curve) {
-                if (!speedText) {
-                    speedText = this.createSpeedLimitText(segment, trackGroup);
-                } else {
-                    speedText.setAttribute('font-size', this.visualSettings.speedLimitSize);
-                    speedText.textContent = segment.speed_limit;
+                const lineCoords = this.calculateSegmentLineCoordinates(segment);
+                if (lineCoords) {
+                    if (!speedText) {
+                        speedText = this.createSpeedLimitText(segment, lineCoords.center_point, trackGroup);
+                    } else {
+                        speedText.setAttribute('font-size', this.visualSettings.speedLimitSize);
+                        speedText.setAttribute('x', lineCoords.center_point[0] + 20);
+                        speedText.setAttribute('y', lineCoords.center_point[1]);
+                        speedText.textContent = segment.speed_limit;
+                    }
                 }
             } else {
                 if (speedText) speedText.remove();
@@ -1099,7 +1162,6 @@ class HeatTrackGenerator {
         
         // Calculate new position based on closest point on centerline
         const centerlineIndex = closestPoint.index;
-        const segmentLength = this.trackData.segment_length;
         
         // Calculate cumulative distance to this point
         let newDistance = 0;
@@ -1114,23 +1176,10 @@ class HeatTrackGenerator {
             }
         }
         
-        // Update segment position
+        // Update segment position data only
         segment.distance = newDistance;
-        segment.center_point = [closestPoint.point[0], closestPoint.point[1]];
-        
-        // Recalculate perpendicular line for the new position
-        const direction = this.calculateDirectionAtPoint(centerlineIndex);
-        const perpendicular = [-direction[1], direction[0]];
-        const halfWidth = this.trackData.track_width / 2;
-        
-        segment.line_start = [
-            segment.center_point[0] - perpendicular[0] * halfWidth,
-            segment.center_point[1] - perpendicular[1] * halfWidth
-        ];
-        segment.line_end = [
-            segment.center_point[0] + perpendicular[0] * halfWidth,
-            segment.center_point[1] + perpendicular[1] * halfWidth
-        ];
+        segment.centerline_index = centerlineIndex;
+        segment.interpolation_t = 0; // Position exactly on centerline point
         
         // Re-render the track to show the updated position
         this.renderTrack(true); // Preserve view when moving segments
