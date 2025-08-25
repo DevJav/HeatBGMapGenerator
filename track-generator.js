@@ -18,6 +18,7 @@ class HeatTrackGenerator {
         // Default visual settings
         this.defaultSettings = {
             segmentNumberSize: 12,
+            segmentNumberOffset: 30, // Distance to offset numbers from centerline
             speedLimitSize: 64,
             normalSegmentWidth: 8,
             curveSegmentWidth: 25,
@@ -80,6 +81,7 @@ class HeatTrackGenerator {
         
         // Visual settings listeners
         document.getElementById('segmentNumberSize').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('segmentNumberOffset').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('speedLimitSize').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('normalSegmentWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('curveSegmentWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
@@ -472,7 +474,9 @@ class HeatTrackGenerator {
                 has_kerb: true,
                 kerb_side: 'both', // 'left', 'right', or 'both'
                 has_white_line: true,
-                white_line_side: 'right' // 'left' or 'right'
+                white_line_side: 'right', // 'left' or 'right'
+                number_side: 'left', // 'left' or 'right' - which side to show numbers
+                targetCurveId: null // Will be set by calculateSpacesToNextCurve
             });
         }
         
@@ -519,9 +523,11 @@ class HeatTrackGenerator {
             return;
         }
 
+        // First pass: calculate spaces to next curve
         this.segmentDivisions.forEach((segment, index) => {
             let spacesToNextCurve = 0;
             let foundCurve = false;
+            let targetCurveSegment = null;
             
             // Look ahead from current segment to find next curve
             for (let i = 1; i < this.segmentDivisions.length; i++) {
@@ -531,6 +537,7 @@ class HeatTrackGenerator {
                 if (nextSegment.is_curve) {
                     spacesToNextCurve = i - 1; // -1 because we don't count the curve segment itself
                     foundCurve = true;
+                    targetCurveSegment = nextSegment;
                     break;
                 }
                 
@@ -542,6 +549,35 @@ class HeatTrackGenerator {
             
             // If no curve found in the entire track, set to null or -1
             segment.spacesToNextCurve = foundCurve ? spacesToNextCurve : null;
+            segment.targetCurveId = targetCurveSegment ? targetCurveSegment.segment_number : null;
+        });
+        
+        // Second pass: group segments by target curve and assign consistent number_side
+        this.groupNumbersByTargetCurve();
+    }
+    
+    // Group segments that point to the same curve and assign consistent number_side
+    groupNumbersByTargetCurve() {
+        if (!this.segmentDivisions) return;
+        
+        // Get all unique target curves
+        const targetCurves = [...new Set(this.segmentDivisions
+            .filter(s => s.targetCurveId !== null)
+            .map(s => s.targetCurveId))];
+        
+        // For each target curve, ensure all segments pointing to it have the same number_side
+        targetCurves.forEach(curveId => {
+            const segmentsPointingToCurve = this.segmentDivisions.filter(s => s.targetCurveId === curveId);
+            
+            if (segmentsPointingToCurve.length > 0) {
+                // Use the number_side of the first segment (or default to 'left' if not set)
+                const consistentSide = segmentsPointingToCurve[0].number_side || 'left';
+                
+                // Apply this side to all segments pointing to this curve
+                segmentsPointingToCurve.forEach(segment => {
+                    segment.number_side = consistentSide;
+                });
+            }
         });
     }
 
@@ -1001,7 +1037,7 @@ class HeatTrackGenerator {
         };
     }
 
-    // Calculate the midpoint between current segment and next segment along the centerline spline
+    // Calculate the position for segment numbers with perpendicular offset from centerline
     calculateSegmentNumberPosition(segment) {
         if (!this.trackData || !this.trackData.segments || !this.centerlinePoints) return null;
         
@@ -1031,12 +1067,26 @@ class HeatTrackGenerator {
             }
         }
         
-        // Find the point on the centerline at this distance
-        return this.findPointAtDistance(midDistance);
+        // Find the point on the centerline at this distance and get direction
+        const centerlineInfo = this.findPointAndDirectionAtDistance(midDistance);
+        if (!centerlineInfo) return null;
+        
+        // Calculate perpendicular offset
+        const offsetDistance = this.visualSettings.segmentNumberOffset || 30;
+        const perpendicular = [-centerlineInfo.direction[1], centerlineInfo.direction[0]]; // Rotate 90 degrees
+        
+        // Apply offset based on the segment's number_side preference
+        const sideMultiplier = (segment.number_side === 'right') ? -1 : 1;
+        const offsetPosition = [
+            centerlineInfo.point[0] + perpendicular[0] * offsetDistance * sideMultiplier,
+            centerlineInfo.point[1] + perpendicular[1] * offsetDistance * sideMultiplier
+        ];
+        
+        return offsetPosition;
     }
     
-    // Find a point at a specific distance along the centerline
-    findPointAtDistance(targetDistance) {
+    // Find a point and direction at a specific distance along the centerline
+    findPointAndDirectionAtDistance(targetDistance) {
         if (!this.centerlinePoints || this.centerlinePoints.length < 2) return null;
         
         // Calculate cumulative distances
@@ -1061,21 +1111,39 @@ class HeatTrackGenerator {
             if (normalizedDistance >= distances[i] && normalizedDistance <= distances[i + 1]) {
                 // Interpolate between points i and i+1
                 const segmentDistance = distances[i + 1] - distances[i];
-                if (segmentDistance === 0) return this.centerlinePoints[i];
+                if (segmentDistance === 0) {
+                    return {
+                        point: this.centerlinePoints[i],
+                        direction: [1, 0] // Default direction if no distance
+                    };
+                }
                 
                 const t = (normalizedDistance - distances[i]) / segmentDistance;
                 const p1 = this.centerlinePoints[i];
                 const p2 = this.centerlinePoints[i + 1];
                 
-                return [
+                const point = [
                     p1[0] + t * (p2[0] - p1[0]),
                     p1[1] + t * (p2[1] - p1[1])
                 ];
+                
+                // Calculate normalized direction vector
+                const direction = this.normalize([p2[0] - p1[0], p2[1] - p1[1]]);
+                
+                return { point, direction };
             }
         }
         
         // Fallback to last point
-        return this.centerlinePoints[this.centerlinePoints.length - 1];
+        const lastIndex = this.centerlinePoints.length - 1;
+        return {
+            point: this.centerlinePoints[lastIndex],
+            direction: lastIndex > 0 ? 
+                this.normalize([
+                    this.centerlinePoints[lastIndex][0] - this.centerlinePoints[lastIndex - 1][0],
+                    this.centerlinePoints[lastIndex][1] - this.centerlinePoints[lastIndex - 1][1]
+                ]) : [1, 0]
+        };
     }
 
     createKerbHitAreas(segment, group) {
@@ -1203,24 +1271,15 @@ class HeatTrackGenerator {
             text.setAttribute('data-segment-id', segment.segment_number);
             text.setAttribute('stroke', 'black');
             text.setAttribute('stroke-width', '0.5');
-            text.style.pointerEvents = this.currentMode === 'edit' ? 'auto' : 'none';
-            text.style.cursor = this.currentMode === 'edit' ? 'move' : 'default';
+            text.style.pointerEvents = (this.currentMode === 'edit' || this.currentMode === 'curve') ? 'auto' : 'none';
+            text.style.cursor = this.currentMode === 'edit' ? 'move' : (this.currentMode === 'curve' ? 'pointer' : 'default');
             
-            // Create main segment number line
-            const segmentNumberLine = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-            segmentNumberLine.setAttribute('x', numberPosition[0]);
-            segmentNumberLine.setAttribute('dy', '0');
-            segmentNumberLine.textContent = segment.segment_number.toString();
-            text.appendChild(segmentNumberLine);
-            
-            // Add spaces to next curve info if available
+            // Show only spaces to next curve if available
             if (segment.spacesToNextCurve !== null && segment.spacesToNextCurve !== undefined) {
-                const spacesLine = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-                spacesLine.setAttribute('x', numberPosition[0]);
-                spacesLine.setAttribute('dy', this.visualSettings.segmentNumberSize + 2); // Move down to next line
-                spacesLine.setAttribute('font-size', Math.max(8, this.visualSettings.segmentNumberSize * 0.7)); // Smaller font for spaces info
-                spacesLine.textContent = `(${segment.spacesToNextCurve})`;
-                text.appendChild(spacesLine);
+                text.textContent = `${segment.spacesToNextCurve}`;
+            } else {
+                // If no curve found or no spaces calculated, show nothing or a dash
+                text.textContent = '';
             }
             
             group.appendChild(text);
@@ -1354,11 +1413,11 @@ class HeatTrackGenerator {
             line.style.cursor = this.getCursorForMode();
         });
         
-        // Update segment number pointer events for edit mode
+        // Update segment number pointer events for edit and curve modes
         const segmentNumbers = svg.querySelectorAll('.segment-number');
         segmentNumbers.forEach(text => {
-            text.style.pointerEvents = mode === 'edit' ? 'auto' : 'none';
-            text.style.cursor = mode === 'edit' ? 'move' : 'default';
+            text.style.pointerEvents = (mode === 'edit' || mode === 'curve') ? 'auto' : 'none';
+            text.style.cursor = mode === 'edit' ? 'move' : (mode === 'curve' ? 'pointer' : 'default');
             
             // Update CSS classes
             if (mode === 'edit') {
@@ -1386,6 +1445,10 @@ class HeatTrackGenerator {
         if (this.currentMode === 'curve') {
             if (element.classList.contains('segment-line')) {
                 this.handleCurveSelection(element);
+                handledByMode = true;
+            } else if (element.classList.contains('segment-number')) {
+                // In curve mode, clicking on numbers toggles their side
+                this.handleNumberSideToggle(element);
                 handledByMode = true;
             }
         } else if (this.currentMode === 'kerb') {
@@ -1551,6 +1614,47 @@ class HeatTrackGenerator {
         
         // Save session after kerb changes
         this.saveSession();
+    }
+
+    handleNumberSideToggle(element) {
+        const segmentId = parseInt(element.getAttribute('data-segment-id'));
+        const segment = this.trackData.segments.find(s => s.segment_number === segmentId);
+        if (!segment) return;
+        
+        // Find which curve this number is pointing to
+        const targetCurveSegment = this.findTargetCurveForSegment(segment);
+        if (!targetCurveSegment) {
+            this.showStatus(`No target curve found for segment ${segmentId}`, 'warning');
+            return;
+        }
+        
+        // Toggle the side for this curve
+        const newSide = (segment.number_side === 'left') ? 'right' : 'left';
+        
+        // Update ALL segments that point to the same target curve
+        let updatedCount = 0;
+        this.trackData.segments.forEach(seg => {
+            const segTargetCurve = this.findTargetCurveForSegment(seg);
+            if (segTargetCurve && segTargetCurve.segment_number === targetCurveSegment.segment_number) {
+                seg.number_side = newSide;
+                updatedCount++;
+            }
+        });
+        
+        // Re-render the track to update number positions
+        this.renderTrack(true); // preserve view
+        
+        // Save session after changes
+        this.saveSession();
+        
+        this.showStatus(`${updatedCount} numbers pointing to curve ${targetCurveSegment.segment_number} moved to ${newSide} side`, 'success');
+    }
+    
+    // Find which curve segment this segment is pointing to
+    findTargetCurveForSegment(segment) {
+        if (!segment.targetCurveId) return null;
+        
+        return this.trackData.segments.find(s => s.segment_number === segment.targetCurveId);
     }
 
     handleKerbSelection(element) {
