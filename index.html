@@ -351,11 +351,11 @@
                 <h2>⚙️ Track Settings</h2>
                 <div class="form-group">
                     <label for="trackWidth">Track Width</label>
-                    <input type="number" id="trackWidth" value="200" min="50" max="500" step="10">
+                    <input type="number" id="trackWidth" value="200" min="10" max="500" step="10">
                 </div>
                 <div class="form-group">
                     <label for="segmentLength">Segment Length</label>
-                    <input type="number" id="segmentLength" value="400" min="100" max="1000" step="50">
+                    <input type="number" id="segmentLength" value="300" min="10" max="1000" step="25">
                 </div>
                 <button class="btn" id="generateBtn">🎯 Generate Track</button>
             </div>
@@ -429,10 +429,10 @@
                 <div class="settings-group">
                     <h3>Text Settings</h3>
                     <label for="segmentNumberSize">Segment Number Size:</label>
-                    <input type="number" id="segmentNumberSize" min="8" max="20" value="12">
+                    <input type="number" id="segmentNumberSize" min="8" max="280" value="38">
                     
                     <label for="segmentNumberOffset">Segment Number Offset:</label>
-                    <input type="number" id="segmentNumberOffset" min="0" max="100" value="30">
+                    <input type="number" id="segmentNumberOffset" min="0" max="300" value="140">
                     
                     <label for="speedLimitSize">Speed Limit Size:</label>
                     <input type="number" id="speedLimitSize" min="20" max="100" value="64">
@@ -450,7 +450,7 @@
                     <input type="number" id="borderWidth" min="1" max="15" value="5">
 
                     <label for="borderOffset">Border Offset (Multiplier):</label>
-                    <input type="number" id="borderOffset" min="0.1" max="5" step="0.1" value="1.0">
+                    <input type="number" id="borderOffset" min="0.1" max="5" step="0.1" value="0.9">
 
                     <label for="centerlineWidth">Centerline Width:</label>
                     <input type="number" id="centerlineWidth" min="3" max="20" value="10">
@@ -481,6 +481,36 @@
                     <h3>White Lines</h3>
                     <label for="whiteLineWidth">White Line Width:</label>
                     <input type="number" id="whiteLineWidth" min="2" max="50" value="20">
+                </div>
+                
+                <div class="settings-group">
+                    <h3>Color Settings</h3>
+                    <label for="trackFillColor">Track Fill Color:</label>
+                    <input type="color" id="trackFillColor" value="#000000">
+                    
+                    <label for="trackBorderColor">Track Border Color:</label>
+                    <input type="color" id="trackBorderColor" value="#ffffff">
+                    
+                    <label for="centerlineColor">Centerline Color:</label>
+                    <input type="color" id="centerlineColor" value="#ffffff">
+                    
+                    <label for="whiteLineColor">White Line Color:</label>
+                    <input type="color" id="whiteLineColor" value="#ffffff">
+                    
+                    <label for="segmentNumberColor">Segment Number Color:</label>
+                    <input type="color" id="segmentNumberColor" value="#ffffff">
+                    
+                    <label for="speedLimitColor">Speed Limit Color:</label>
+                    <input type="color" id="speedLimitColor" value="#ffff00">
+                    
+                    <label for="kerbWhiteColor">Kerb White Color:</label>
+                    <input type="color" id="kerbWhiteColor" value="#ffffff">
+                    
+                    <label for="kerbRedColor">Kerb Red Color:</label>
+                    <input type="color" id="kerbRedColor" value="#9f1717">
+                    
+                    <label for="debugTextColor">Debug Text Color:</label>
+                    <input type="color" id="debugTextColor" value="#ff0000">
                 </div>
                 
                 <div class="settings-buttons">

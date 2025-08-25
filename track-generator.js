@@ -17,20 +17,31 @@ class HeatTrackGenerator {
         
         // Default visual settings
         this.defaultSettings = {
-            segmentNumberSize: 12,
-            segmentNumberOffset: 30, // Distance to offset numbers from centerline
+            segmentNumberSize: 38,
+            segmentNumberOffset: 140, // Distance to offset numbers from centerline
             speedLimitSize: 64,
             normalSegmentWidth: 8,
             curveSegmentWidth: 25,
             borderWidth: 5,
-            borderOffset: 1.0,
-            centerlineWidth: 10,
-            dashLength: 25,
-            gapLength: 25,
-            kerbWidth: 6,
+            borderOffset: 0.9,
+            centerlineWidth: 5,
+            dashLength: 20,
+            gapLength: 20,
+            kerbWidth: 12,
             kerbDashLength: 15,
             kerbGapLength: 10,
-            whiteLineWidth: 20,
+            whiteLineWidth: 12,
+            // Color settings
+            trackFillColor: '#000000',
+            trackBorderColor: '#ffffff',
+            centerlineColor: '#ffffff',
+            whiteLineColor: '#ffffff',
+            previewCenterlineColor: '#fb0000',
+            segmentNumberColor: '#ffffff',
+            speedLimitColor: '#ffff00',
+            debugTextColor: '#ff0000',
+            kerbWhiteColor: '#ffffff',
+            kerbRedColor: '#9f1717',
         };
         
         // Load saved settings or use defaults
@@ -94,6 +105,17 @@ class HeatTrackGenerator {
         document.getElementById('kerbDashLength').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('kerbGapLength').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('whiteLineWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
+        
+        // Color settings listeners
+        document.getElementById('trackFillColor').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('trackBorderColor').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('centerlineColor').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('whiteLineColor').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('segmentNumberColor').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('speedLimitColor').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('debugTextColor').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('kerbWhiteColor').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('kerbRedColor').addEventListener('change', this.onVisualSettingChange.bind(this));
         
         // Settings buttons
         document.getElementById('saveSettings').addEventListener('click', this.saveVisualSettings.bind(this));
@@ -214,7 +236,7 @@ class HeatTrackGenerator {
 
         // Create centerline path for preview
         const centerPath = this.createPathFromPoints(this.centerlinePoints);
-        centerPath.setAttribute('stroke', '#fb0000ff'); // Green color for preview
+        centerPath.setAttribute('stroke', this.visualSettings.previewCenterlineColor); // Color for preview
         centerPath.setAttribute('stroke-width', '25');
         centerPath.setAttribute('fill', 'none');
         previewGroup.appendChild(centerPath);
@@ -472,7 +494,7 @@ class HeatTrackGenerator {
                 is_curve: false,
                 speed_limit: 0,
                 has_kerb: true,
-                kerb_side: 'both', // 'left', 'right', or 'both'
+                kerb_side: 'left', // 'left', 'right', or 'both'
                 has_white_line: true,
                 white_line_side: 'right', // 'left' or 'right'
                 number_side: 'left', // 'left' or 'right' - which side to show numbers
@@ -671,7 +693,7 @@ class HeatTrackGenerator {
 
             const segmentFill = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             segmentFill.setAttribute('d', segmentFillPath);
-            segmentFill.setAttribute('fill', 'black');
+            segmentFill.setAttribute('fill', this.visualSettings.trackFillColor);
             segmentFill.setAttribute('stroke', 'none');
             segmentFill.setAttribute('class', 'segment-fill');
             segmentFill.setAttribute('data-segment-id', segment.segment_number);
@@ -745,14 +767,14 @@ class HeatTrackGenerator {
         
         // Left border
         const leftPath = this.createPathFromPoints(leftBorderPoints);
-        leftPath.setAttribute('stroke', 'white');
+        leftPath.setAttribute('stroke', this.visualSettings.trackBorderColor);
         leftPath.setAttribute('stroke-width', this.visualSettings.borderWidth);
         leftPath.setAttribute('fill', 'none');
         group.appendChild(leftPath);
 
         // Right border
         const rightPath = this.createPathFromPoints(rightBorderPoints);
-        rightPath.setAttribute('stroke', 'white');
+        rightPath.setAttribute('stroke', this.visualSettings.trackBorderColor);
         rightPath.setAttribute('stroke-width', this.visualSettings.borderWidth);
         rightPath.setAttribute('fill', 'none');
         group.appendChild(rightPath);
@@ -973,7 +995,7 @@ class HeatTrackGenerator {
 
     renderCenterline(group) {
         const centerPath = this.createPathFromPoints(this.trackData.centerline);
-        centerPath.setAttribute('stroke', 'white');
+        centerPath.setAttribute('stroke', this.visualSettings.centerlineColor);
         centerPath.setAttribute('stroke-width', this.visualSettings.centerlineWidth);
         centerPath.setAttribute('stroke-dasharray', `${this.visualSettings.dashLength} ${this.visualSettings.gapLength}`);
         centerPath.setAttribute('fill', 'none');
@@ -1268,7 +1290,7 @@ class HeatTrackGenerator {
             text.setAttribute('y', numberPosition[1]);
             text.setAttribute('text-anchor', 'middle');
             text.setAttribute('dominant-baseline', 'middle');
-            text.setAttribute('fill', 'white');
+            text.setAttribute('fill', this.visualSettings.segmentNumberColor);
             text.setAttribute('font-size', this.visualSettings.segmentNumberSize);
             text.setAttribute('font-weight', 'bold');
             text.setAttribute('class', `segment-number ${this.currentMode === 'edit' ? 'draggable' : ''}`);
@@ -1312,7 +1334,7 @@ class HeatTrackGenerator {
         speedText.setAttribute('y', centerPoint[1]);
         speedText.setAttribute('text-anchor', 'middle');
         speedText.setAttribute('dominant-baseline', 'middle');
-        speedText.setAttribute('fill', 'yellow');
+        speedText.setAttribute('fill', this.visualSettings.speedLimitColor);
         speedText.setAttribute('font-size', this.visualSettings.speedLimitSize);
         speedText.setAttribute('font-weight', 'bold');
         speedText.setAttribute('stroke', 'black');
@@ -1378,7 +1400,16 @@ class HeatTrackGenerator {
 
     onVisualSettingChange(e) {
         const settingName = e.target.id;
-        const value = settingName === 'borderOffset' ? parseFloat(e.target.value) : parseInt(e.target.value);
+        let value;
+        
+        if (e.target.type === 'color') {
+            value = e.target.value; // Color inputs return hex strings
+        } else if (settingName === 'borderOffset') {
+            value = parseFloat(e.target.value);
+        } else {
+            value = parseInt(e.target.value);
+        }
+        
         this.visualSettings[settingName] = value;
         
         if (this.trackData) {
@@ -2241,7 +2272,7 @@ class HeatTrackGenerator {
         
         if (whiteLinePoints.length > 1) {
             const whiteLinePath = this.createPathFromPoints(whiteLinePoints);
-            whiteLinePath.setAttribute('stroke', 'white');
+            whiteLinePath.setAttribute('stroke', this.visualSettings.whiteLineColor);
             whiteLinePath.setAttribute('stroke-width', this.visualSettings.whiteLineWidth);
             whiteLinePath.setAttribute('fill', 'none');
             whiteLinePath.setAttribute('id', `${groupId}-${side}`);
@@ -2340,7 +2371,7 @@ class HeatTrackGenerator {
         // Create base white kerb stripe
         const whiteKerbPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         whiteKerbPath.setAttribute('d', pathData);
-        whiteKerbPath.setAttribute('stroke', 'white');
+        whiteKerbPath.setAttribute('stroke', this.visualSettings.kerbWhiteColor);
         whiteKerbPath.setAttribute('stroke-width', this.visualSettings.kerbWidth);
         whiteKerbPath.setAttribute('fill', 'none');
         whiteKerbPath.style.pointerEvents = 'none';
@@ -2349,7 +2380,7 @@ class HeatTrackGenerator {
         // Create red striped pattern on top
         const redKerbPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         redKerbPath.setAttribute('d', pathData);
-        redKerbPath.setAttribute('stroke', '#9f1717ff');
+        redKerbPath.setAttribute('stroke', this.visualSettings.kerbRedColor);
         redKerbPath.setAttribute('stroke-width', this.visualSettings.kerbWidth);
         redKerbPath.setAttribute('stroke-dasharray', `${this.visualSettings.kerbDashLength} ${this.visualSettings.kerbGapLength}`);
         redKerbPath.setAttribute('fill', 'none');
@@ -2573,7 +2604,7 @@ class HeatTrackGenerator {
         const debugText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         debugText.setAttribute('x', point.x + 15);
         debugText.setAttribute('y', point.y - 10);
-        debugText.setAttribute('fill', color);
+        debugText.setAttribute('fill', this.visualSettings.debugTextColor);
         debugText.setAttribute('font-size', '12');
         debugText.setAttribute('font-weight', 'bold');
         debugText.setAttribute('stroke', 'white');
