@@ -20,6 +20,7 @@ class HeatTrackGenerator {
             segmentNumberSize: 38,
             segmentNumberOffset: 140, // Distance to offset numbers from centerline
             speedLimitSize: 64,
+            speedLimitOffset: 160, // Distance to offset speed limits from centerline
             normalSegmentWidth: 8,
             curveSegmentWidth: 25,
             borderWidth: 5,
@@ -94,6 +95,7 @@ class HeatTrackGenerator {
         document.getElementById('segmentNumberSize').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('segmentNumberOffset').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('speedLimitSize').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('speedLimitOffset').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('normalSegmentWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('curveSegmentWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('borderWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
@@ -498,6 +500,7 @@ class HeatTrackGenerator {
                 has_white_line: true,
                 white_line_side: 'right', // 'left' or 'right'
                 number_side: 'left', // 'left' or 'right' - which side to show numbers
+                speed_limit_side: 'left', // 'left' or 'right' - which side to show speed limits
                 targetCurveId: null // Will be set by calculateSpacesToNextCurve
             });
         }
@@ -1108,7 +1111,10 @@ class HeatTrackGenerator {
             centerlineInfo.point[1] + perpendicular[1] * offsetDistance * sideMultiplier
         ];
         
-        return offsetPosition;
+        return {
+            position: offsetPosition,
+            direction: centerlineInfo.direction
+        };
     }
     
     // Find a point and direction at a specific distance along the centerline
@@ -1169,6 +1175,35 @@ class HeatTrackGenerator {
                     this.centerlinePoints[lastIndex][0] - this.centerlinePoints[lastIndex - 1][0],
                     this.centerlinePoints[lastIndex][1] - this.centerlinePoints[lastIndex - 1][1]
                 ]) : [1, 0]
+        };
+    }
+
+    // Calculate the position for speed limits with perpendicular offset from centerline
+    calculateSpeedLimitPosition(segment) {
+        if (!this.trackData || !this.trackData.segments || !this.centerlinePoints) return null;
+        if (!segment.is_curve || !segment.speed_limit) return null;
+        
+        // For speed limits, position them at the segment's center point
+        const segmentDistance = segment.distance || 0;
+        
+        // Find the point on the centerline at this distance and get direction
+        const centerlineInfo = this.findPointAndDirectionAtDistance(segmentDistance);
+        if (!centerlineInfo) return null;
+        
+        // Calculate perpendicular offset
+        const offsetDistance = this.visualSettings.speedLimitOffset || 100;
+        const perpendicular = [-centerlineInfo.direction[1], centerlineInfo.direction[0]]; // Rotate 90 degrees
+        
+        // Apply offset based on the segment's speed_limit_side preference
+        const sideMultiplier = (segment.speed_limit_side === 'right') ? -1 : 1;
+        const offsetPosition = [
+            centerlineInfo.point[0] + perpendicular[0] * offsetDistance * sideMultiplier,
+            centerlineInfo.point[1] + perpendicular[1] * offsetDistance * sideMultiplier
+        ];
+        
+        return {
+            position: offsetPosition,
+            direction: centerlineInfo.direction
         };
     }
 
@@ -1282,12 +1317,17 @@ class HeatTrackGenerator {
             this.createWhiteLineHitAreas(segment, group);
 
             // Add segment number with spaces to next curve
-            const numberPosition = this.calculateSegmentNumberPosition(segment);
-            if (!numberPosition) return; // Skip if position calculation failed
+            const numberInfo = this.calculateSegmentNumberPosition(segment);
+            if (!numberInfo) return; // Skip if position calculation failed
             
             const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', numberPosition[0]);
-            text.setAttribute('y', numberPosition[1]);
+            text.setAttribute('x', numberInfo.position[0]);
+            text.setAttribute('y', numberInfo.position[1]);
+            
+            // Calculate rotation angle from direction vector
+            const angle = Math.atan2(numberInfo.direction[1], numberInfo.direction[0]) * 180 / Math.PI;
+            text.setAttribute('transform', `rotate(${angle} ${numberInfo.position[0]} ${numberInfo.position[1]})`);
+            
             text.setAttribute('text-anchor', 'middle');
             text.setAttribute('dominant-baseline', 'middle');
             text.setAttribute('fill', this.visualSettings.segmentNumberColor);
@@ -1312,7 +1352,7 @@ class HeatTrackGenerator {
             
             // Add speed limit text for curves
             if (segment.is_curve && segment.speed_limit) {
-                this.createSpeedLimitText(segment, lineCoords.center_point, group);
+                this.createSpeedLimitText(segment, group);
             }
         });
     }
@@ -1327,11 +1367,20 @@ class HeatTrackGenerator {
         return path;
     }
 
-    createSpeedLimitText(segment, centerPoint, group) {
+    createSpeedLimitText(segment, group) {
+        // Calculate the position with offset from centerline
+        const speedLimitInfo = this.calculateSpeedLimitPosition(segment);
+        if (!speedLimitInfo) return null;
+        
         const speedText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         speedText.setAttribute('id', `speed-text-${segment.segment_number}`);
-        speedText.setAttribute('x', centerPoint[0] + 20);
-        speedText.setAttribute('y', centerPoint[1]);
+        speedText.setAttribute('x', speedLimitInfo.position[0]);
+        speedText.setAttribute('y', speedLimitInfo.position[1]);
+        
+        // Calculate rotation angle from direction vector
+        const angle = Math.atan2(speedLimitInfo.direction[1], speedLimitInfo.direction[0]) * 180 / Math.PI;
+        speedText.setAttribute('transform', `rotate(${angle} ${speedLimitInfo.position[0]} ${speedLimitInfo.position[1]})`);
+        
         speedText.setAttribute('text-anchor', 'middle');
         speedText.setAttribute('dominant-baseline', 'middle');
         speedText.setAttribute('fill', this.visualSettings.speedLimitColor);
@@ -1340,7 +1389,7 @@ class HeatTrackGenerator {
         speedText.setAttribute('stroke', 'black');
         speedText.setAttribute('stroke-width', '0.5');
         speedText.setAttribute('class', 'speed-limit-text');
-        speedText.style.pointerEvents = 'none';
+        speedText.style.pointerEvents = (this.currentMode === 'edit' || this.currentMode === 'curve') ? 'auto' : 'none';
         speedText.textContent = segment.speed_limit;
         group.appendChild(speedText);
         return speedText;
@@ -1462,6 +1511,13 @@ class HeatTrackGenerator {
             }
         });
         
+        // Update speed limit text pointer events for curve mode
+        const speedLimitTexts = svg.querySelectorAll('.speed-limit-text');
+        speedLimitTexts.forEach(text => {
+            text.style.pointerEvents = (mode === 'curve') ? 'auto' : 'none';
+            text.style.cursor = mode === 'curve' ? 'pointer' : 'default';
+        });
+        
         // Re-render track to update kerb hit areas based on new mode
         if (this.trackData) {
             this.renderTrack(true);
@@ -1484,6 +1540,10 @@ class HeatTrackGenerator {
             } else if (element.classList.contains('segment-number')) {
                 // In curve mode, clicking on numbers toggles their side
                 this.handleNumberSideToggle(element);
+                handledByMode = true;
+            } else if (element.classList.contains('speed-limit-text')) {
+                // In curve mode, clicking on speed limits toggles their side
+                this.handleSpeedLimitSideToggle(element);
                 handledByMode = true;
             }
         } else if (this.currentMode === 'kerb') {
@@ -1685,6 +1745,24 @@ class HeatTrackGenerator {
         this.showStatus(`${updatedCount} numbers pointing to curve ${targetCurveSegment.segment_number} moved to ${newSide} side`, 'success');
     }
     
+    handleSpeedLimitSideToggle(element) {
+        const segmentId = parseInt(element.id.replace('speed-text-', ''));
+        const segment = this.trackData.segments.find(s => s.segment_number === segmentId);
+        if (!segment || !segment.is_curve) return;
+        
+        // Toggle the side for this speed limit
+        const newSide = (segment.speed_limit_side === 'left') ? 'right' : 'left';
+        segment.speed_limit_side = newSide;
+        
+        // Re-render the track to update speed limit position
+        this.renderTrack(true); // preserve view
+        
+        // Save session after changes
+        this.saveSession();
+        
+        this.showStatus(`Speed limit for curve ${segmentId} moved to ${newSide} side`, 'success');
+    }
+    
     // Find which curve segment this segment is pointing to
     findTargetCurveForSegment(segment) {
         if (!segment.targetCurveId) return null;
@@ -1748,12 +1826,21 @@ class HeatTrackGenerator {
                 const lineCoords = this.calculateSegmentLineCoordinates(segment);
                 if (lineCoords) {
                     if (!speedText) {
-                        speedText = this.createSpeedLimitText(segment, lineCoords.center_point, trackGroup);
+                        speedText = this.createSpeedLimitText(segment, trackGroup);
                     } else {
-                        speedText.setAttribute('font-size', this.visualSettings.speedLimitSize);
-                        speedText.setAttribute('x', lineCoords.center_point[0] + 20);
-                        speedText.setAttribute('y', lineCoords.center_point[1]);
-                        speedText.textContent = segment.speed_limit;
+                        // Update speed limit position with the new offset system
+                        const speedLimitInfo = this.calculateSpeedLimitPosition(segment);
+                        if (speedLimitInfo) {
+                            speedText.setAttribute('font-size', this.visualSettings.speedLimitSize);
+                            speedText.setAttribute('x', speedLimitInfo.position[0]);
+                            speedText.setAttribute('y', speedLimitInfo.position[1]);
+                            
+                            // Update rotation angle
+                            const angle = Math.atan2(speedLimitInfo.direction[1], speedLimitInfo.direction[0]) * 180 / Math.PI;
+                            speedText.setAttribute('transform', `rotate(${angle} ${speedLimitInfo.position[0]} ${speedLimitInfo.position[1]})`);
+                            
+                            speedText.textContent = segment.speed_limit;
+                        }
                     }
                 }
             } else {
