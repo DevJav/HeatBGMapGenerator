@@ -250,7 +250,7 @@ class HeatTrackGenerator {
             this.generateTrackBorders(trackWidth);
             
             // Divide track into segments
-            this.divideTrackIntoSegments(segmentLength);
+            this.divideTrackIntoSegments(segmentLength, trackWidth);
             
             // Create track data object
             this.trackData = {
@@ -339,7 +339,29 @@ class HeatTrackGenerator {
         return length > 0 ? [vector[0] / length, vector[1] / length] : [0, 0];
     }
 
-    divideTrackIntoSegments(segmentLength) {
+    divideTrackIntoSegments(segmentLength, trackWidth = null) {
+        // Constants
+        const MIN_SEGMENT_DISTANCE_RATIO = 0.5; // Minimum distance as ratio of segment length
+        const EPSILON = 1e-10; // Small value to prevent division by zero
+        
+        // Input validation
+        if (!this.centerlinePoints || this.centerlinePoints.length < 2) {
+            throw new Error('Invalid centerline points: Need at least 2 points');
+        }
+        
+        if (segmentLength <= 0) {
+            throw new Error('Segment length must be positive');
+        }
+        
+        // Get track width from parameter or DOM fallback
+        const halfWidth = trackWidth ? 
+            trackWidth / 2 : 
+            parseFloat(document.getElementById('trackWidth').value) / 2;
+        
+        if (halfWidth <= 0) {
+            throw new Error('Track width must be positive');
+        }
+        
         // Calculate cumulative distances along centerline
         const distances = [0];
         for (let i = 1; i < this.centerlinePoints.length; i++) {
@@ -352,84 +374,121 @@ class HeatTrackGenerator {
         }
         
         const totalLength = distances[distances.length - 1];
+        
+        // Check if track is long enough for segments
+        if (totalLength < segmentLength) {
+            console.warn(`Track length (${totalLength.toFixed(2)}) is shorter than segment length (${segmentLength})`);
+            this.segmentDivisions = [];
+            return;
+        }
+        
         const numSegments = Math.floor(totalLength / segmentLength);
         
         console.log(`Track length: ${totalLength.toFixed(2)} units`);
         console.log(`Creating ${numSegments} segments of ${segmentLength} units each`);
         
-        // Find points at segment boundaries
+        // Find points at segment boundaries using optimized search
         const segmentDivisions = [];
+        let distanceIndex = 0; // Performance optimization: maintain search pointer
         
         for (let i = 0; i <= numSegments; i++) {
             const targetDistance = i * segmentLength;
             
-            // Find the closest point on centerline
-            for (let j = 0; j < distances.length - 1; j++) {
-                if (distances[j] <= targetDistance && targetDistance <= distances[j + 1]) {
-                    // Interpolate between points j and j+1
-                    const t = (targetDistance - distances[j]) / (distances[j + 1] - distances[j]);
-                    
-                    const p1 = this.centerlinePoints[j];
-                    const p2 = this.centerlinePoints[j + 1];
-                    
-                    // Interpolated point on centerline
-                    const centerPoint = [
-                        p1[0] + t * (p2[0] - p1[0]),
-                        p1[1] + t * (p2[1] - p1[1])
-                    ];
-                    
-                    // Calculate direction for perpendicular
-                    const direction = this.normalize([p2[0] - p1[0], p2[1] - p1[1]]);
-                    const perpendicular = [-direction[1], direction[0]];
-                    
-                    // Create perpendicular line across track width
-                    const halfWidth = parseFloat(document.getElementById('trackWidth').value) / 2;
-                    const lineStart = [
-                        centerPoint[0] - perpendicular[0] * halfWidth,
-                        centerPoint[1] - perpendicular[1] * halfWidth
-                    ];
-                    const lineEnd = [
-                        centerPoint[0] + perpendicular[0] * halfWidth,
-                        centerPoint[1] + perpendicular[1] * halfWidth
-                    ];
-                    
-                    segmentDivisions.push({
-                        segment_number: i + 1,
-                        center_point: centerPoint,
-                        line_start: lineStart,
-                        line_end: lineEnd,
-                        distance: targetDistance,
-                        is_curve: false,
-                        speed_limit: 3,
-                        has_track_outline: false
-                    });
-                    break;
-                }
+            // Advance pointer to correct position (optimization)
+            while (distanceIndex < distances.length - 1 && 
+                   distances[distanceIndex + 1] < targetDistance) {
+                distanceIndex++;
             }
+            
+            // Ensure we're within bounds
+            if (distanceIndex >= distances.length - 1) {
+                console.warn(`Reached end of centerline at segment ${i}`);
+                break;
+            }
+            
+            // Safety check for division by zero
+            const segmentDistance = distances[distanceIndex + 1] - distances[distanceIndex];
+            if (segmentDistance < EPSILON) {
+                console.warn(`Zero distance between points ${distanceIndex} and ${distanceIndex + 1}, skipping`);
+                continue;
+            }
+            
+            // Interpolate between points
+            const t = (targetDistance - distances[distanceIndex]) / segmentDistance;
+            
+            // Clamp t to [0, 1] range for safety
+            const clampedT = Math.max(0, Math.min(1, t));
+            
+            const p1 = this.centerlinePoints[distanceIndex];
+            const p2 = this.centerlinePoints[distanceIndex + 1];
+            
+            // Interpolated point on centerline
+            const centerPoint = [
+                p1[0] + clampedT * (p2[0] - p1[0]),
+                p1[1] + clampedT * (p2[1] - p1[1])
+            ];
+            
+            // Calculate direction for perpendicular
+            const direction = this.normalize([p2[0] - p1[0], p2[1] - p1[1]]);
+            
+            // Handle case where direction is zero (duplicate points)
+            if (direction[0] === 0 && direction[1] === 0) {
+                console.warn(`Zero direction vector at segment ${i}, using default direction`);
+                direction[0] = 1; // Default to horizontal direction
+            }
+            
+            const perpendicular = [-direction[1], direction[0]];
+            
+            // Create perpendicular line across track width
+            const lineStart = [
+                centerPoint[0] - perpendicular[0] * halfWidth,
+                centerPoint[1] - perpendicular[1] * halfWidth
+            ];
+            const lineEnd = [
+                centerPoint[0] + perpendicular[0] * halfWidth,
+                centerPoint[1] + perpendicular[1] * halfWidth
+            ];
+            
+            segmentDivisions.push({
+                segment_number: i + 1,
+                center_point: centerPoint,
+                line_start: lineStart,
+                line_end: lineEnd,
+                distance: targetDistance,
+                is_curve: false,
+                speed_limit: 0,
+                has_track_outline: false
+            });
         }
         
         // Check for closed track and remove last segment if too close to first
         if (segmentDivisions.length > 1) {
             const first = segmentDivisions[0];
             const last = segmentDivisions[segmentDivisions.length - 1];
-            const distance = Math.sqrt(
+            const distanceToFirst = Math.sqrt(
                 Math.pow(last.center_point[0] - first.center_point[0], 2) +
                 Math.pow(last.center_point[1] - first.center_point[1], 2)
             );
             
-            if (distance < segmentLength) {
+            const minDistance = segmentLength * MIN_SEGMENT_DISTANCE_RATIO;
+            if (distanceToFirst < minDistance) {
                 segmentDivisions.pop();
-                console.log(`Removed last segment due to insufficient distance to first segment`);
+                console.log(`Removed last segment due to insufficient distance (${distanceToFirst.toFixed(2)}) to first segment`);
             }
         }
         
-        // Re-number segments
+        // Re-number segments to ensure continuous numbering
         segmentDivisions.forEach((segment, index) => {
             segment.segment_number = index + 1;
         });
         
         this.segmentDivisions = segmentDivisions;
         console.log(`Created ${segmentDivisions.length} segment divisions`);
+        
+        // Validate result
+        if (segmentDivisions.length === 0) {
+            console.warn('No segments were created - check input parameters');
+        }
     }
 
     renderTrack(preserveView = false) {
