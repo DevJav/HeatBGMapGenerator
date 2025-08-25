@@ -162,7 +162,7 @@ class HeatTrackGenerator {
         
         // Sample points along the path
         const points = [];
-        const numSamples = 1000; // TODO: Configurable parameter
+        const numSamples = 5000; // TODO: Configurable parameter
         
         for (let i = 0; i <= numSamples; i++) {
             const distance = (i / numSamples) * pathLength;
@@ -525,9 +525,9 @@ class HeatTrackGenerator {
         // Render track components
         this.renderTrackFill(trackGroup);
         this.renderTrackBorders(trackGroup);
-        this.renderKerbs(trackGroup);
         this.renderCenterline(trackGroup);
         this.renderSegmentDivisions(trackGroup);
+        this.renderKerbs(trackGroup);
 
         svg.appendChild(trackGroup);
     }
@@ -602,12 +602,143 @@ class HeatTrackGenerator {
     }
 
     renderKerbs(group) {
-        // Render red and white striped kerbs for segments marked with kerbs
+        // Group contiguous kerb segments and render them as unified kerbs
         const kerbSegments = this.trackData.segments.filter(s => s.has_kerb);
+        const contiguousGroups = this.groupContiguousKerbSegments(kerbSegments);
         
-        kerbSegments.forEach(segment => {
-            this.createKerbForSegment(segment, group);
+        contiguousGroups.forEach(kerbGroup => {
+            this.createUnifiedKerbForGroup(kerbGroup, group);
         });
+    }
+
+    groupContiguousKerbSegments(kerbSegments) {
+        if (kerbSegments.length === 0) return [];
+        
+        // Sort segments by their distance along the track
+        const sortedSegments = [...kerbSegments].sort((a, b) => (a.distance || 0) - (b.distance || 0));
+        
+        const groups = [];
+        let currentGroup = {
+            segments: [sortedSegments[0]],
+            sides: new Set([sortedSegments[0].kerb_side])
+        };
+        
+        for (let i = 1; i < sortedSegments.length; i++) {
+            const currentSegment = sortedSegments[i];
+            const previousSegment = sortedSegments[i - 1];
+            
+            // Check if segments are contiguous (next segment number or very close distance)
+            const isContiguous = this.areSegmentsContiguous(previousSegment, currentSegment);
+            const hasSameSide = this.doKerbSidesOverlap(previousSegment.kerb_side, currentSegment.kerb_side);
+            
+            if (isContiguous && hasSameSide) {
+                // Add to current group
+                currentGroup.segments.push(currentSegment);
+                currentGroup.sides.add(currentSegment.kerb_side);
+            } else {
+                // Start new group
+                groups.push(currentGroup);
+                currentGroup = {
+                    segments: [currentSegment],
+                    sides: new Set([currentSegment.kerb_side])
+                };
+            }
+        }
+        
+        // Add the last group
+        groups.push(currentGroup);
+        
+        return groups;
+    }
+
+    areSegmentsContiguous(segment1, segment2) {
+        // Check if segments are consecutive by segment number
+        if (Math.abs(segment1.segment_number - segment2.segment_number) === 1) {
+            return true;
+        }
+        
+        // Check if segments are very close in distance (allowing for small gaps)
+        const distance1 = segment1.distance || 0;
+        const distance2 = segment2.distance || 0;
+        const segmentLength = this.trackData.segment_length || 400;
+        const maxGap = segmentLength * 1.5; // Allow up to 1.5x segment length gap
+        
+        return Math.abs(distance2 - distance1) <= maxGap;
+    }
+
+    doKerbSidesOverlap(side1, side2) {
+        // Check if two kerb sides have any overlap
+        if (side1 === 'both' || side2 === 'both') return true;
+        if (side1 === side2) return true;
+        return false;
+    }
+
+    createUnifiedKerbForGroup(kerbGroup, group) {
+        // Calculate the combined boundaries of all segments in the group
+        const segments = kerbGroup.segments;
+        const firstSegment = segments[0];
+        const lastSegment = segments[segments.length - 1];
+        
+        // Calculate the start and end positions
+        const startDistance = firstSegment.distance || 0;
+        
+        // For end distance, calculate the actual end of the last segment
+        const lastSegmentIndex = this.trackData.segments.findIndex(s => s.segment_number === lastSegment.segment_number);
+        const nextSegment = this.trackData.segments[lastSegmentIndex + 1];
+        
+        let endDistance;
+        if (nextSegment) {
+            endDistance = nextSegment.distance || 0;
+        } else {
+            const totalLength = this.calculateTrackLength();
+            const remainingLength = totalLength - (lastSegment.distance || 0);
+            const segmentLength = Math.min(remainingLength, this.trackData.segment_length || 400);
+            endDistance = (lastSegment.distance || 0) + segmentLength;
+        }
+        
+        const totalLength = this.calculateTrackLength();
+        const startRatio = startDistance / totalLength;
+        const endRatio = Math.min(endDistance / totalLength, 1);
+        
+        // Determine which sides to render (union of all sides in the group)
+        const allSides = new Set();
+        segments.forEach(segment => {
+            if (segment.kerb_side === 'both') {
+                allSides.add('left');
+                allSides.add('right');
+            } else {
+                allSides.add(segment.kerb_side);
+            }
+        });
+        
+        // Calculate border distance
+        const borderDistance = (this.trackData.track_width / 2) * this.visualSettings.borderOffset;
+        
+        // Create unified kerb paths
+        allSides.forEach(side => {
+            this.createUnifiedKerbPath(startRatio, endRatio, side, borderDistance, group, firstSegment.segment_number);
+        });
+    }
+
+    createUnifiedKerbPath(startRatio, endRatio, side, borderDistance, group, groupId) {
+        // Get the centerline segment for the unified kerb
+        const centerlineStartIndex = Math.floor(startRatio * (this.trackData.centerline.length - 1));
+        const centerlineEndIndex = Math.ceil(endRatio * (this.trackData.centerline.length - 1));
+        
+        const centerlineSegment = this.trackData.centerline.slice(centerlineStartIndex, centerlineEndIndex + 1);
+        
+        if (centerlineSegment.length < 2) return;
+        
+        // Calculate the kerb offset
+        const borderStrokeWidth = this.visualSettings.borderWidth || 2;
+        const kerbOffset = borderDistance - (borderStrokeWidth / 2) + (this.visualSettings.kerbWidth / 2);
+        
+        // Create kerb path at the correct distance from centerline
+        const kerbPoints = this.createParallelLine(centerlineSegment, kerbOffset, side);
+        
+        if (kerbPoints.length > 1) {
+            this.createKerbPath(kerbPoints, `unified-${side}-kerb-group-${groupId}`, group);
+        }
     }
 
     renderCenterline(group) {
@@ -686,7 +817,23 @@ class HeatTrackGenerator {
         
         const segmentProgress = segment.distance || 0;
         const totalLength = this.calculateTrackLength();
-        const segmentLength = this.trackData.segment_length || 400;
+        
+        // Calculate actual segment length based on next segment position
+        const currentSegmentIndex = this.trackData.segments.findIndex(s => s.segment_number === segment.segment_number);
+        const nextSegment = this.trackData.segments[currentSegmentIndex + 1];
+        
+        let segmentLength;
+        if (nextSegment) {
+            // Use distance to next segment
+            segmentLength = (nextSegment.distance || 0) - segmentProgress;
+        } else {
+            // Last segment: use remaining track length or default segment length
+            const remainingLength = totalLength - segmentProgress;
+            segmentLength = Math.min(remainingLength, this.trackData.segment_length || 400);
+        }
+        
+        // Ensure positive segment length
+        segmentLength = Math.max(segmentLength, 10); // Minimum 10 units
         
         const startRatio = segmentProgress / totalLength;
         const endRatio = Math.min((segmentProgress + segmentLength) / totalLength, 1);
@@ -1370,10 +1517,23 @@ class HeatTrackGenerator {
         // Create red and white striped kerbs on track borders for this segment
         const segmentProgress = segment.distance || 0;
         const totalLength = this.calculateTrackLength();
-        const segmentLength = this.trackData.segment_length || 400;
         
-        const startRatio = segmentProgress / totalLength;
-        const endRatio = Math.min((segmentProgress + segmentLength) / totalLength, 1);
+        // Calculate actual segment length based on next segment position
+        const currentSegmentIndex = this.trackData.segments.findIndex(s => s.segment_number === segment.segment_number);
+        const nextSegment = this.trackData.segments[currentSegmentIndex + 1];
+        
+        let segmentLength;
+        if (nextSegment) {
+            // Use distance to next segment
+            segmentLength = (nextSegment.distance || 0) - segmentProgress;
+        } else {
+            // Last segment: use remaining track length or default segment length
+            const remainingLength = totalLength - segmentProgress;
+            segmentLength = Math.min(remainingLength, this.trackData.segment_length || 400);
+        }
+        
+        // Ensure positive segment length
+        segmentLength = Math.max(segmentLength, 10); // Minimum 10 units
         
         // Calculate border distance for white track borders
         const borderDistance = (this.trackData.track_width / 2) * this.visualSettings.borderOffset;
@@ -1390,7 +1550,23 @@ class HeatTrackGenerator {
     createKerbPathAtBorder(segment, side, borderDistance, group) {
         const segmentProgress = segment.distance || 0;
         const totalLength = this.calculateTrackLength();
-        const segmentLength = this.trackData.segment_length || 400;
+        
+        // Calculate actual segment length based on next segment position
+        const currentSegmentIndex = this.trackData.segments.findIndex(s => s.segment_number === segment.segment_number);
+        const nextSegment = this.trackData.segments[currentSegmentIndex + 1];
+        
+        let segmentLength;
+        if (nextSegment) {
+            // Use distance to next segment
+            segmentLength = (nextSegment.distance || 0) - segmentProgress;
+        } else {
+            // Last segment: use remaining track length or default segment length
+            const remainingLength = totalLength - segmentProgress;
+            segmentLength = Math.min(remainingLength, this.trackData.segment_length || 400);
+        }
+        
+        // Ensure positive segment length
+        segmentLength = Math.max(segmentLength, 10); // Minimum 10 units
         
         const startRatio = segmentProgress / totalLength;
         const endRatio = Math.min((segmentProgress + segmentLength) / totalLength, 1);
@@ -1436,7 +1612,7 @@ class HeatTrackGenerator {
         // Create red striped pattern on top
         const redKerbPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         redKerbPath.setAttribute('d', pathData);
-        redKerbPath.setAttribute('stroke', 'red');
+        redKerbPath.setAttribute('stroke', '#9f1717ff');
         redKerbPath.setAttribute('stroke-width', this.visualSettings.kerbWidth);
         redKerbPath.setAttribute('stroke-dasharray', `${this.visualSettings.kerbDashLength} ${this.visualSettings.kerbGapLength}`);
         redKerbPath.setAttribute('fill', 'none');
