@@ -36,6 +36,9 @@ class HeatTrackGenerator {
         
         this.initializeEventListeners();
         this.setupSVGInteraction();
+        
+        // Try to restore previous session
+        this.restoreSession();
     }
 
     initializeEventListeners() {
@@ -60,6 +63,14 @@ class HeatTrackGenerator {
         // Export buttons
         document.getElementById('exportPNG').addEventListener('click', () => this.exportTrack('png'));
         document.getElementById('exportSVG').addEventListener('click', () => this.exportTrack('svg'));
+
+        // Session management
+        document.getElementById('clearSession').addEventListener('click', () => {
+            if (confirm('Are you sure you want to clear the saved session? This will remove the current map and reset the view.')) {
+                this.clearSession();
+                location.reload(); // Refresh the page to show the cleared state
+            }
+        });
 
         // Settings change listeners
         document.getElementById('trackWidth').addEventListener('change', this.onSettingChange.bind(this));
@@ -162,7 +173,7 @@ class HeatTrackGenerator {
         
         // Sample points along the path
         const points = [];
-        const numSamples = 5000; // TODO: Configurable parameter
+        const numSamples = 1000; // TODO: Configurable parameter
         
         for (let i = 0; i <= numSamples; i++) {
             const distance = (i / numSamples) * pathLength;
@@ -204,6 +215,9 @@ class HeatTrackGenerator {
         previewGroup.appendChild(centerPath);
         
         svg.appendChild(previewGroup);
+        
+        // Save session after loading centerline
+        this.saveSession();
     }
 
     autoScaleAndCenterPreview(previewGroup) {
@@ -266,6 +280,9 @@ class HeatTrackGenerator {
             
             // Render the track
             this.renderTrack();
+            
+            // Save session after successful track generation
+            this.saveSession();
             
             this.showStatus('Track generated successfully!', 'success');
         } catch (error) {
@@ -1138,6 +1155,9 @@ class HeatTrackGenerator {
             
             this.lastPanX = x;
             this.lastPanY = y;
+            
+            // Save session after panning (with debouncing)
+            this.debouncedSaveSession();
         }
     }
 
@@ -1172,6 +1192,9 @@ class HeatTrackGenerator {
             trackGroup.setAttribute('transform', 
                 `translate(${this.panX}, ${this.panY}) scale(${this.scale})`);
         }
+        
+        // Save session after view changes (with debouncing)
+        this.debouncedSaveSession();
     }
 
     handleCurveSelection(element) {
@@ -1185,6 +1208,10 @@ class HeatTrackGenerator {
         }
         
         this.updateSegmentVisual(segmentId, segment);
+        
+        // Save session after curve changes
+        this.saveSession();
+        
         this.showStatus(`Segment ${segmentId} ${segment.is_curve ? 'marked as curve' : 'unmarked as curve'}`, 'success');
     }
 
@@ -1219,6 +1246,9 @@ class HeatTrackGenerator {
         }
         
         this.renderTrack(true); // Preserve view when toggling kerb
+        
+        // Save session after kerb changes
+        this.saveSession();
     }
 
     handleKerbSelection(element) {
@@ -1256,6 +1286,9 @@ class HeatTrackGenerator {
         }
         
         this.renderTrack(true); // Preserve view when toggling kerb
+        
+        // Save session after kerb changes
+        this.saveSession();
     }
 
     updateSegmentVisual(segmentId, segment) {
@@ -1454,6 +1487,9 @@ class HeatTrackGenerator {
         
         // Re-render the track to show the updated position
         this.renderTrack(true); // Preserve view when moving segments
+        
+        // Save session after segment movement
+        this.saveSession();
         
         this.showStatus(`Segment ${segmentId} moved to new position`, 'success');
     }
@@ -1693,6 +1729,98 @@ class HeatTrackGenerator {
         const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
         const svgUrl = URL.createObjectURL(svgBlob);
         img.src = svgUrl;
+    }
+
+    // Session persistence methods
+    debouncedSaveSession() {
+        // Clear existing timeout
+        if (this.saveSessionTimeout) {
+            clearTimeout(this.saveSessionTimeout);
+        }
+        
+        // Set new timeout to save after 1 second of inactivity
+        this.saveSessionTimeout = setTimeout(() => {
+            this.saveSession();
+        }, 1000);
+    }
+
+    saveSession() {
+        try {
+            const sessionData = {
+                centerlinePoints: this.centerlinePoints,
+                trackData: this.trackData,
+                viewState: {
+                    scale: this.scale,
+                    panX: this.panX,
+                    panY: this.panY
+                },
+                currentMode: this.currentMode,
+                timestamp: Date.now()
+            };
+            
+            localStorage.setItem('heatTrackSession', JSON.stringify(sessionData));
+        } catch (error) {
+            console.warn('Failed to save session:', error);
+        }
+    }
+
+    restoreSession() {
+        try {
+            const savedSession = localStorage.getItem('heatTrackSession');
+            if (!savedSession) return;
+            
+            const sessionData = JSON.parse(savedSession);
+            
+            // Check if session is recent (within 7 days)
+            const daysSinceLastSession = (Date.now() - sessionData.timestamp) / (1000 * 60 * 60 * 24);
+            if (daysSinceLastSession > 7) {
+                localStorage.removeItem('heatTrackSession');
+                return;
+            }
+            
+            // Restore centerline points
+            if (sessionData.centerlinePoints && sessionData.centerlinePoints.length > 0) {
+                this.centerlinePoints = sessionData.centerlinePoints;
+                this.showCenterlinePreview();
+            }
+            
+            // Restore track data
+            if (sessionData.trackData) {
+                this.trackData = sessionData.trackData;
+                this.renderTrack();
+                
+                // Restore view state after track is rendered
+                if (sessionData.viewState) {
+                    this.scale = sessionData.viewState.scale || 1;
+                    this.panX = sessionData.viewState.panX || 0;
+                    this.panY = sessionData.viewState.panY || 0;
+                    
+                    // Apply the restored view transform
+                    const svg = document.getElementById('trackCanvas');
+                    const trackGroup = svg.querySelector('#trackGroup');
+                    if (trackGroup) {
+                        trackGroup.setAttribute('transform', 
+                            `translate(${this.panX}, ${this.panY}) scale(${this.scale})`);
+                    }
+                }
+            }
+            
+            // Restore mode
+            if (sessionData.currentMode) {
+                this.setMode(sessionData.currentMode);
+            }
+            
+            this.showStatus('Session restored from previous visit!', 'success');
+            
+        } catch (error) {
+            console.warn('Failed to restore session:', error);
+            localStorage.removeItem('heatTrackSession');
+        }
+    }
+
+    clearSession() {
+        localStorage.removeItem('heatTrackSession');
+        this.showStatus('Session cleared', 'success');
     }
 
     // Utility methods
