@@ -933,10 +933,19 @@
 
             // ... (Continue with remaining methods in next part)
             
-            renderTrack() {
+            renderTrack(preserveView = false) {
                 if (!this.trackData) return;
 
                 const svg = document.getElementById('trackCanvas');
+                
+                // Store current transform if preserving view
+                let currentTransform = null;
+                if (preserveView) {
+                    const existingTrack = svg.querySelector('#trackGroup');
+                    if (existingTrack) {
+                        currentTransform = existingTrack.getAttribute('transform');
+                    }
+                }
                 
                 // Clear existing track
                 const existingTrack = svg.querySelector('#trackGroup');
@@ -949,8 +958,14 @@
                 const trackGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                 trackGroup.id = 'trackGroup';
                 
-                // Auto-scale and center
-                this.autoScaleAndCenter(trackGroup);
+                // Apply transform based on preserveView flag
+                if (preserveView && currentTransform) {
+                    // Preserve the existing view
+                    trackGroup.setAttribute('transform', currentTransform);
+                } else {
+                    // Auto-scale and center for initial render
+                    this.autoScaleAndCenter(trackGroup);
+                }
 
                 // Render track components
                 this.renderTrackFill(trackGroup);
@@ -1163,7 +1178,7 @@
             loadAndApplySettings() {
                 this.visualSettings = this.loadVisualSettings();
                 if (this.trackData) {
-                    this.renderTrack();
+                    this.renderTrack(true); // Preserve view when loading settings
                 }
                 this.showStatus('Settings loaded and applied!', 'success');
             }
@@ -1172,7 +1187,7 @@
                 this.visualSettings = { ...this.defaultSettings };
                 this.applySettingsToUI(this.visualSettings);
                 if (this.trackData) {
-                    this.renderTrack();
+                    this.renderTrack(true); // Preserve view when resetting settings
                 }
                 this.showStatus('Settings reset to default!', 'success');
             }
@@ -1183,7 +1198,7 @@
                 this.visualSettings[settingName] = value;
                 
                 if (this.trackData) {
-                    this.renderTrack();
+                    this.renderTrack(true); // Preserve view when changing visual settings
                 }
             }
 
@@ -1343,7 +1358,7 @@
                 if (!segment) return;
                 
                 segment.has_track_outline = !segment.has_track_outline;
-                this.renderTrack(); // Re-render to update outlines
+                this.renderTrack(true); // Preserve view when toggling outline
                 this.showStatus(`Segment ${segmentId} ${segment.has_track_outline ? 'track outline added' : 'track outline removed'}`, 'success');
             }
 
@@ -1551,7 +1566,7 @@
                 ];
                 
                 // Re-render the track to show the updated position
-                this.renderTrack();
+                this.renderTrack(true); // Preserve view when moving segments
                 
                 this.showStatus(`Segment ${segmentId} moved to new position`, 'success');
             }
@@ -1633,7 +1648,7 @@
 
             getTrackBorderSegment(borderPoints, startRatio, endRatio) {
                 const startIndex = Math.floor(startRatio * (borderPoints.length - 1));
-                const endIndex = Math.ceil(endRatio * (borderPoints.length - 1));
+                const endIndex = Math.floor(endRatio * (borderPoints.length - 1));
                 return borderPoints.slice(startIndex, endIndex + 1);
             }
 
@@ -1651,21 +1666,19 @@
                 redPath.setAttribute('stroke-width', this.visualSettings.trackOutlineWidth);
                 redPath.setAttribute('stroke-dasharray', `${this.visualSettings.trackOutlineDashLength} ${this.visualSettings.trackOutlineGapLength}`);
                 redPath.setAttribute('fill', 'none');
-                redPath.setAttribute('opacity', '0.8');
                 redPath.style.pointerEvents = 'none';
                 group.appendChild(redPath);
                 
-                // White dashed outline (offset pattern)
-                const whitePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                whitePath.setAttribute('d', pathData);
-                whitePath.setAttribute('stroke', 'white');
-                whitePath.setAttribute('stroke-width', this.visualSettings.trackOutlineWidth);
-                whitePath.setAttribute('stroke-dasharray', `${this.visualSettings.trackOutlineGapLength} ${this.visualSettings.trackOutlineDashLength}`);
-                whitePath.setAttribute('stroke-dashoffset', this.visualSettings.trackOutlineDashLength);
-                whitePath.setAttribute('fill', 'none');
-                whitePath.setAttribute('opacity', '0.9');
-                whitePath.style.pointerEvents = 'none';
-                group.appendChild(whitePath);
+                // // White dashed outline (offset pattern)
+                // const whitePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                // whitePath.setAttribute('d', pathData);
+                // whitePath.setAttribute('stroke', 'white');
+                // whitePath.setAttribute('stroke-width', this.visualSettings.trackOutlineWidth);
+                // whitePath.setAttribute('stroke-dasharray', `${this.visualSettings.trackOutlineGapLength} ${this.visualSettings.trackOutlineDashLength}`);
+                // whitePath.setAttribute('stroke-dashoffset', this.visualSettings.trackOutlineDashLength);
+                // whitePath.setAttribute('fill', 'none');
+                // whitePath.style.pointerEvents = 'none';
+                // group.appendChild(whitePath);
             }
 
             calculateTrackLength() {
