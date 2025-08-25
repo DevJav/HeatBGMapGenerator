@@ -997,7 +997,8 @@ class HeatTrackGenerator {
             case 'edit': return 'move';
             case 'curve':
             case 'kerb': return 'pointer';
-            default: return 'default';
+            case 'pan': return 'grab';
+            default: return 'crosshair';
         }
     }
 
@@ -1071,7 +1072,7 @@ class HeatTrackGenerator {
         
         // Update cursors and pointer events
         const svg = document.getElementById('trackCanvas');
-        svg.style.cursor = mode === 'pan' ? 'grab' : 'crosshair';
+        svg.style.cursor = this.getCursorForMode();
         
         const segmentLines = svg.querySelectorAll('.segment-line');
         segmentLines.forEach(line => {
@@ -1104,28 +1105,43 @@ class HeatTrackGenerator {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         
+        const element = e.target;
+        let handledByMode = false;
+        
         if (this.currentMode === 'curve') {
-            const element = e.target;
             if (element.classList.contains('segment-line')) {
                 this.handleCurveSelection(element);
+                handledByMode = true;
             }
         } else if (this.currentMode === 'kerb') {
-            const element = e.target;
             if (element.classList.contains('segment-line')) {
                 this.handleKerbSelection(element);
+                handledByMode = true;
             } else if (element.classList.contains('kerb-hit-area')) {
                 this.handleKerbAreaSelection(element);
+                handledByMode = true;
             }
         } else if (this.currentMode === 'edit') {
-            const element = e.target;
             if (element.classList.contains('segment-line') || element.classList.contains('segment-number')) {
                 this.startSegmentDrag(element, x, y);
+                handledByMode = true;
             }
-        } else if (this.currentMode === 'pan') {
-            this.isDragging = true;
-            this.lastPanX = x;
-            this.lastPanY = y;
-            svg.style.cursor = 'grabbing';
+        }
+        
+        // If no mode-specific interaction occurred, or we're in pan mode, allow panning
+        if (!handledByMode || this.currentMode === 'pan') {
+            // Check if we clicked on an interactive element (but not the background)
+            const isInteractiveElement = element.classList.contains('segment-line') || 
+                                       element.classList.contains('segment-number') || 
+                                       element.classList.contains('kerb-hit-area');
+            
+            // Only start panning if we didn't click on an interactive element or we're in pan mode
+            if (!isInteractiveElement || this.currentMode === 'pan') {
+                this.isDragging = true;
+                this.lastPanX = x;
+                this.lastPanY = y;
+                svg.style.cursor = 'grabbing';
+            }
         }
     }
 
@@ -1140,7 +1156,8 @@ class HeatTrackGenerator {
 
         if (this.currentMode === 'edit' && this.isDragging && this.draggedSegmentId) {
             this.updateSegmentDragPreview(x, y);
-        } else if (this.currentMode === 'pan' && this.isDragging) {
+        } else if (this.isDragging && !this.draggedSegmentId) {
+            // Handle panning regardless of current mode (when dragging but not dragging a segment)
             const deltaX = x - this.lastPanX;
             const deltaY = y - this.lastPanY;
             
@@ -1164,10 +1181,11 @@ class HeatTrackGenerator {
     handleMouseUp() {
         if (this.currentMode === 'edit' && this.isDragging && this.draggedSegmentId) {
             this.finishSegmentDrag();
-        } else {
+        } else if (this.isDragging) {
+            // End panning (regardless of mode)
             this.isDragging = false;
             const svg = document.getElementById('trackCanvas');
-            svg.style.cursor = this.currentMode === 'pan' ? 'grab' : 'crosshair';
+            svg.style.cursor = this.getCursorForMode();
         }
     }
 
