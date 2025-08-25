@@ -552,12 +552,12 @@ class HeatTrackGenerator {
             segment.targetCurveId = targetCurveSegment ? targetCurveSegment.segment_number : null;
         });
         
-        // Second pass: group segments by target curve and assign consistent number_side
-        this.groupNumbersByTargetCurve();
+        // Second pass: group segments by target curve and assign consistent number_side and white_line_side
+        this.groupPropertiesByTargetCurve();
     }
     
-    // Group segments that point to the same curve and assign consistent number_side
-    groupNumbersByTargetCurve() {
+    // Group segments that point to the same curve and assign consistent number_side and white_line_side
+    groupPropertiesByTargetCurve() {
         if (!this.segmentDivisions) return;
         
         // Get all unique target curves
@@ -565,17 +565,21 @@ class HeatTrackGenerator {
             .filter(s => s.targetCurveId !== null)
             .map(s => s.targetCurveId))];
         
-        // For each target curve, ensure all segments pointing to it have the same number_side
+        // For each target curve, ensure all segments pointing to it have consistent properties
         targetCurves.forEach(curveId => {
             const segmentsPointingToCurve = this.segmentDivisions.filter(s => s.targetCurveId === curveId);
             
             if (segmentsPointingToCurve.length > 0) {
                 // Use the number_side of the first segment (or default to 'left' if not set)
-                const consistentSide = segmentsPointingToCurve[0].number_side || 'left';
+                const consistentNumberSide = segmentsPointingToCurve[0].number_side || 'left';
                 
-                // Apply this side to all segments pointing to this curve
+                // Use the white_line_side of the first segment (or default to 'right' if not set)
+                const consistentWhiteLineSide = segmentsPointingToCurve[0].white_line_side || 'right';
+                
+                // Apply consistent properties to all segments pointing to this curve
                 segmentsPointingToCurve.forEach(segment => {
-                    segment.number_side = consistentSide;
+                    segment.number_side = consistentNumberSide;
+                    segment.white_line_side = consistentWhiteLineSide;
                 });
             }
         });
@@ -1966,27 +1970,51 @@ class HeatTrackGenerator {
         const segment = this.trackData.segments.find(s => s.segment_number === segmentId);
         if (!segment) return;
         
+        // Find which curve this segment is pointing to
+        const targetCurveSegment = this.findTargetCurveForSegment(segment);
+        if (!targetCurveSegment) {
+            this.showStatus(`No target curve found for segment ${segmentId}`, 'warning');
+            return;
+        }
+        
+        // Get all segments that point to the same target curve
+        const relatedSegments = this.trackData.segments.filter(seg => {
+            const segTargetCurve = this.findTargetCurveForSegment(seg);
+            return segTargetCurve && segTargetCurve.segment_number === targetCurveSegment.segment_number;
+        });
+        
         // Initialize white line properties if they don't exist
         if (!segment.has_white_line) {
             segment.has_white_line = false;
             segment.white_line_side = 'left'; // Default to left, but will be set by clicked side
         }
         
+        let actionDescription = '';
+        let updatedCount = 0;
+        
         if (!segment.has_white_line) {
-            // First click: enable white line on the clicked side
-            segment.has_white_line = true;
-            segment.white_line_side = side;
-            this.showStatus(`Segment ${segmentId} white line added (${side} side)`, 'success');
+            // First click: enable white line on the clicked side for all related segments
+            relatedSegments.forEach(seg => {
+                seg.has_white_line = true;
+                seg.white_line_side = side;
+                updatedCount++;
+            });
+            actionDescription = `white lines added (${side} side)`;
         } else {
-            // If clicking the same side, remove white line
+            // If clicking the same side, remove white line from all related segments
             if (segment.white_line_side === side) {
-                // Remove white line completely
-                segment.has_white_line = false;
-                this.showStatus(`Segment ${segmentId} white line removed`, 'success');
+                relatedSegments.forEach(seg => {
+                    seg.has_white_line = false;
+                    updatedCount++;
+                });
+                actionDescription = `white lines removed`;
             } else {
-                // Clicking the opposite side, switch to that side
-                segment.white_line_side = side;
-                this.showStatus(`Segment ${segmentId} white line switched to ${side} side`, 'success');
+                // Clicking the opposite side, switch all related segments to that side
+                relatedSegments.forEach(seg => {
+                    seg.white_line_side = side;
+                    updatedCount++;
+                });
+                actionDescription = `white lines switched to ${side} side`;
             }
         }
         
@@ -1994,6 +2022,8 @@ class HeatTrackGenerator {
         
         // Save session after white line changes
         this.saveSession();
+        
+        this.showStatus(`${updatedCount} segments pointing to curve ${targetCurveSegment.segment_number}: ${actionDescription}`, 'success');
     }
 
     handleWhiteLineSelection(element) {
