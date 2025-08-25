@@ -606,15 +606,31 @@ class HeatTrackGenerator {
     }
 
     createSegmentFillPath(segment) {
-        const totalSegments = this.trackData.segments.length;
-        const currentSegmentIndex = this.trackData.segments.findIndex(s => s.segment_number === segment.segment_number);
+        // Use actual segment distances to calculate boundaries, not array indices
+        const allSegments = [...this.trackData.segments].sort((a, b) => (a.distance || 0) - (b.distance || 0));
+        const segmentIndex = allSegments.findIndex(s => s.segment_number === segment.segment_number);
+        const totalLength = this.calculateTrackLength();
         
-        // Calculate the segment boundaries based on index, not distance
-        const segmentRatio = 1 / totalSegments;
-        const startRatio = currentSegmentIndex * segmentRatio;
-        const endRatio = (currentSegmentIndex + 1) * segmentRatio;
+        // Calculate actual boundaries based on segment positions
+        let startDistance = 0;
+        let endDistance = segment.distance || 0;
         
-        // Make sure we don't exceed the array bounds
+        // Start distance is the position of the previous segment (if any)
+        if (segmentIndex > 0) {
+            startDistance = allSegments[segmentIndex - 1].distance || 0;
+        }
+        
+        // End distance is the position of the next segment (if any), otherwise track end
+        if (segmentIndex < allSegments.length - 1) {
+            endDistance = allSegments[segmentIndex + 1].distance || 0;
+        } else {
+            endDistance = totalLength;
+        }
+        
+        const startRatio = startDistance / totalLength;
+        const endRatio = endDistance / totalLength;
+        
+        // Get border points for this segment range
         const leftBorderLength = this.trackData.left_border.length;
         const rightBorderLength = this.trackData.right_border.length;
         
@@ -628,16 +644,6 @@ class HeatTrackGenerator {
         const rightBorderPoints = this.trackData.right_border.slice(rightStartIndex, rightEndIndex + 1);
         
         if (!leftBorderPoints.length || !rightBorderPoints.length) return null;
-        
-        // For the last segment, make sure we include the final points
-        if (currentSegmentIndex === totalSegments - 1) {
-            if (leftEndIndex < leftBorderLength - 1) {
-                leftBorderPoints.push(this.trackData.left_border[leftBorderLength - 1]);
-            }
-            if (rightEndIndex < rightBorderLength - 1) {
-                rightBorderPoints.push(this.trackData.right_border[rightBorderLength - 1]);
-            }
-        }
         
         // Create path: start from left border, go to end of left border, then reverse along right border back to start
         const allPoints = [
@@ -694,27 +700,27 @@ class HeatTrackGenerator {
         const groups = [];
         let currentGroup = {
             segments: [sortedSegments[0]],
-            sides: new Set([sortedSegments[0].kerb_side])
+            segmentSides: new Map([[sortedSegments[0].segment_number, sortedSegments[0].kerb_side]])
         };
         
         for (let i = 1; i < sortedSegments.length; i++) {
             const currentSegment = sortedSegments[i];
             const previousSegment = currentGroup.segments[currentGroup.segments.length - 1];
             
-            // For kerbs, only group if segments are consecutive by number AND compatible sides
+            // For kerbs, only group if segments are consecutive by number AND have overlapping sides
             const isConsecutive = (currentSegment.segment_number === previousSegment.segment_number + 1);
-            const compatibleSides = this.doKerbSidesOverlap(previousSegment.kerb_side, currentSegment.kerb_side);
+            const overlappingSides = this.doKerbSidesOverlap(previousSegment.kerb_side, currentSegment.kerb_side);
             
-            if (isConsecutive && compatibleSides) {
-                // Add to current group
+            if (isConsecutive && overlappingSides) {
+                // Add to current group and track what sides this segment contributes
                 currentGroup.segments.push(currentSegment);
-                currentGroup.sides.add(currentSegment.kerb_side);
+                currentGroup.segmentSides.set(currentSegment.segment_number, currentSegment.kerb_side);
             } else {
                 // Start new group
                 groups.push(currentGroup);
                 currentGroup = {
                     segments: [currentSegment],
-                    sides: new Set([currentSegment.kerb_side])
+                    segmentSides: new Map([[currentSegment.segment_number, currentSegment.kerb_side]])
                 };
             }
         }
@@ -780,24 +786,91 @@ class HeatTrackGenerator {
         const startRatio = startDistance / totalLength;
         const endRatio = Math.min(endDistance / totalLength, 1);
         
-        // Determine which sides to render (union of all sides in the group)
-        const allSides = new Set();
-        segments.forEach(segment => {
-            if (segment.kerb_side === 'both') {
-                allSides.add('left');
-                allSides.add('right');
-            } else {
-                allSides.add(segment.kerb_side);
-            }
-        });
+        // Determine which sides to render based on segment-by-segment analysis
+        const sidesToRender = this.calculateKerbSidesToRender(kerbGroup, startRatio, endRatio);
         
         // Calculate border distance
         const borderDistance = (this.trackData.track_width / 2) * this.visualSettings.borderOffset;
         
-        // Create unified kerb paths
-        allSides.forEach(side => {
-            this.createUnifiedKerbPath(startRatio, endRatio, side, borderDistance, group, firstSegment.segment_number);
+        // Create unified kerb paths for each continuous side
+        sidesToRender.forEach(sideInfo => {
+            this.createUnifiedKerbPath(sideInfo.startRatio, sideInfo.endRatio, sideInfo.side, borderDistance, group, `${firstSegment.segment_number}-${sideInfo.side}`);
         });
+    }
+
+    calculateKerbSidesToRender(kerbGroup, groupStartRatio, groupEndRatio) {
+        const segments = kerbGroup.segments;
+        const totalLength = this.calculateTrackLength();
+        const sidesToRender = [];
+        
+        // Track continuous runs of each side
+        let leftRuns = [];
+        let rightRuns = [];
+        let currentLeftRun = null;
+        let currentRightRun = null;
+        
+        segments.forEach((segment, index) => {
+            const segmentSide = kerbGroup.segmentSides.get(segment.segment_number);
+            const segmentStartDistance = segment.distance || 0;
+            
+            // Calculate end distance for this segment
+            let segmentEndDistance;
+            if (index < segments.length - 1) {
+                segmentEndDistance = segments[index + 1].distance || 0;
+            } else {
+                // Last segment in group
+                const lastSegmentIndex = this.trackData.segments.findIndex(s => s.segment_number === segment.segment_number);
+                const nextSegment = this.trackData.segments[lastSegmentIndex + 1];
+                if (nextSegment) {
+                    segmentEndDistance = nextSegment.distance || 0;
+                } else {
+                    segmentEndDistance = totalLength;
+                }
+            }
+            
+            const segmentStartRatio = segmentStartDistance / totalLength;
+            const segmentEndRatio = segmentEndDistance / totalLength;
+            
+            // Check if this segment has left side kerb
+            const hasLeft = (segmentSide === 'left' || segmentSide === 'both');
+            if (hasLeft) {
+                if (!currentLeftRun) {
+                    currentLeftRun = { startRatio: segmentStartRatio, endRatio: segmentEndRatio };
+                } else {
+                    currentLeftRun.endRatio = segmentEndRatio;
+                }
+            } else {
+                if (currentLeftRun) {
+                    leftRuns.push({ ...currentLeftRun, side: 'left' });
+                    currentLeftRun = null;
+                }
+            }
+            
+            // Check if this segment has right side kerb
+            const hasRight = (segmentSide === 'right' || segmentSide === 'both');
+            if (hasRight) {
+                if (!currentRightRun) {
+                    currentRightRun = { startRatio: segmentStartRatio, endRatio: segmentEndRatio };
+                } else {
+                    currentRightRun.endRatio = segmentEndRatio;
+                }
+            } else {
+                if (currentRightRun) {
+                    rightRuns.push({ ...currentRightRun, side: 'right' });
+                    currentRightRun = null;
+                }
+            }
+        });
+        
+        // Close any remaining runs
+        if (currentLeftRun) {
+            leftRuns.push({ ...currentLeftRun, side: 'left' });
+        }
+        if (currentRightRun) {
+            rightRuns.push({ ...currentRightRun, side: 'right' });
+        }
+        
+        return [...leftRuns, ...rightRuns];
     }
 
     createUnifiedKerbPath(startRatio, endRatio, side, borderDistance, group, groupId) {
@@ -965,7 +1038,6 @@ class HeatTrackGenerator {
             // Calculate line coordinates dynamically
             const lineCoords = this.calculateSegmentLineCoordinates(segment);
             if (!lineCoords) return; // Skip if calculation failed
-            console.log('Line coordinates:', lineCoords.line_start, lineCoords.line_end);
 
             // Create visible segment line
             const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -1178,23 +1250,17 @@ class HeatTrackGenerator {
         let handledByMode = false;
         
         if (this.currentMode === 'curve') {
-            if (element.classList.contains('segment-line') || element.classList.contains('segment-fill')) {
+            if (element.classList.contains('segment-line')) {
                 this.handleCurveSelection(element);
                 handledByMode = true;
             }
         } else if (this.currentMode === 'kerb') {
-            if (element.classList.contains('segment-line') || element.classList.contains('segment-fill')) {
-                this.handleKerbSelection(element);
-                handledByMode = true;
-            } else if (element.classList.contains('kerb-hit-area')) {
+            if (element.classList.contains('kerb-hit-area')) {
                 this.handleKerbAreaSelection(element);
                 handledByMode = true;
             }
         } else if (this.currentMode === 'whiteLine') {
-            if (element.classList.contains('segment-line') || element.classList.contains('segment-fill')) {
-                this.handleWhiteLineSelection(element);
-                handledByMode = true;
-            } else if (element.classList.contains('white-line-hit-area')) {
+            if (element.classList.contains('white-line-hit-area')) {
                 this.handleWhiteLineAreaSelection(element);
                 handledByMode = true;
             }
@@ -1576,10 +1642,13 @@ class HeatTrackGenerator {
             }
         }
         
-        // Update segment position data only
+        // Update the moved segment's position
         segment.distance = newDistance;
         segment.centerline_index = centerlineIndex;
         segment.interpolation_t = 0; // Position exactly on centerline point
+        
+        // The new segment fill calculation will automatically handle how this affects
+        // the boundaries of adjacent segments when the track is re-rendered
         
         // Re-render the track to update segment fills based on new positions
         this.renderTrack(true); // Preserve view when moving segments
@@ -1587,7 +1656,7 @@ class HeatTrackGenerator {
         // Save session after segment movement
         this.saveSession();
         
-        this.showStatus(`Segment ${segmentId} moved to new position`, 'success');
+        this.showStatus(`Segment ${segmentId} moved - adjacent segments updated`, 'success');
     }
 
     calculateDirectionAtPoint(centerlineIndex) {
@@ -1761,13 +1830,13 @@ class HeatTrackGenerator {
         );
         
         // Create clickable areas along the track borders
-        const leftBorderSegment = this.createParallelLine(centerlineSegment, whiteLineDistance, 'left');
-        const rightBorderSegment = this.createParallelLine(centerlineSegment, whiteLineDistance, 'right');
+        const leftBorderSegment = this.createParallelLine(centerlineSegment, trackBorderDistance, 'left');
+        const rightBorderSegment = this.createParallelLine(centerlineSegment, trackBorderDistance, 'right');
         
         if (leftBorderSegment.length > 1) {
             const leftHitArea = this.createPathFromPoints(leftBorderSegment);
             leftHitArea.setAttribute('stroke', 'transparent');
-            leftHitArea.setAttribute('stroke-width', '20');
+            leftHitArea.setAttribute('stroke-width', '60');
             leftHitArea.setAttribute('fill', 'none');
             leftHitArea.setAttribute('opacity', '0');
             leftHitArea.setAttribute('class', 'white-line-hit-area');
@@ -1780,7 +1849,7 @@ class HeatTrackGenerator {
         if (rightBorderSegment.length > 1) {
             const rightHitArea = this.createPathFromPoints(rightBorderSegment);
             rightHitArea.setAttribute('stroke', 'transparent');
-            rightHitArea.setAttribute('stroke-width', '20');
+            rightHitArea.setAttribute('stroke-width', '60');
             rightHitArea.setAttribute('fill', 'none');
             rightHitArea.setAttribute('opacity', '0');
             rightHitArea.setAttribute('class', 'white-line-hit-area');
