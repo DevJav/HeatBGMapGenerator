@@ -22,6 +22,7 @@ class HeatTrackGenerator {
             normalSegmentWidth: 8,
             curveSegmentWidth: 25,
             borderWidth: 5,
+            borderOffset: 1.0,
             centerlineWidth: 10,
             dashLength: 25,
             gapLength: 25,
@@ -70,6 +71,7 @@ class HeatTrackGenerator {
         document.getElementById('normalSegmentWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('curveSegmentWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('borderWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('borderOffset').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('centerlineWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('dashLength').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('gapLength').addEventListener('change', this.onVisualSettingChange.bind(this));
@@ -582,15 +584,22 @@ class HeatTrackGenerator {
     }
 
     renderTrackBorders(group) {
+        // Calculate track borders at configurable distance from centerline
+        const borderDistance = (this.trackData.track_width / 2) * this.visualSettings.borderOffset;
+        
+        // Generate left and right border points based on centerline and configurable offset
+        const leftBorderPoints = this.createParallelLine(this.trackData.centerline, borderDistance, 'left');
+        const rightBorderPoints = this.createParallelLine(this.trackData.centerline, borderDistance, 'right');
+        
         // Left border
-        const leftPath = this.createPathFromPoints(this.trackData.left_border);
+        const leftPath = this.createPathFromPoints(leftBorderPoints);
         leftPath.setAttribute('stroke', 'white');
         leftPath.setAttribute('stroke-width', this.visualSettings.borderWidth);
         leftPath.setAttribute('fill', 'none');
         group.appendChild(leftPath);
 
         // Right border
-        const rightPath = this.createPathFromPoints(this.trackData.right_border);
+        const rightPath = this.createPathFromPoints(rightBorderPoints);
         rightPath.setAttribute('stroke', 'white');
         rightPath.setAttribute('stroke-width', this.visualSettings.borderWidth);
         rightPath.setAttribute('fill', 'none');
@@ -646,23 +655,23 @@ class HeatTrackGenerator {
             hitArea.style.cursor = this.getCursorForMode();
             group.appendChild(hitArea);
 
-            // Add segment number
-            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', segment.center_point[0]);
-            text.setAttribute('y', segment.center_point[1]);
-            text.setAttribute('text-anchor', 'middle');
-            text.setAttribute('dominant-baseline', 'middle');
-            text.setAttribute('fill', 'white');
-            text.setAttribute('font-size', this.visualSettings.segmentNumberSize);
-            text.setAttribute('font-weight', 'bold');
-            text.setAttribute('class', `segment-number ${this.currentMode === 'edit' ? 'draggable' : ''}`);
-            text.setAttribute('data-segment-id', segment.segment_number);
-            text.setAttribute('stroke', 'black');
-            text.setAttribute('stroke-width', '0.5');
-            text.style.pointerEvents = this.currentMode === 'edit' ? 'auto' : 'none';
-            text.style.cursor = this.currentMode === 'edit' ? 'move' : 'default';
-            text.textContent = segment.segment_number;
-            group.appendChild(text);
+            // // Add segment number
+            // const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            // text.setAttribute('x', segment.center_point[0]);
+            // text.setAttribute('y', segment.center_point[1]);
+            // text.setAttribute('text-anchor', 'middle');
+            // text.setAttribute('dominant-baseline', 'middle');
+            // text.setAttribute('fill', 'white');
+            // text.setAttribute('font-size', this.visualSettings.segmentNumberSize);
+            // text.setAttribute('font-weight', 'bold');
+            // text.setAttribute('class', `segment-number ${this.currentMode === 'edit' ? 'draggable' : ''}`);
+            // text.setAttribute('data-segment-id', segment.segment_number);
+            // text.setAttribute('stroke', 'black');
+            // text.setAttribute('stroke-width', '0.5');
+            // text.style.pointerEvents = this.currentMode === 'edit' ? 'auto' : 'none';
+            // text.style.cursor = this.currentMode === 'edit' ? 'move' : 'default';
+            // text.textContent = segment.segment_number;
+            // group.appendChild(text);
             
             // Add speed limit text for curves
             if (segment.is_curve && segment.speed_limit) {
@@ -752,7 +761,7 @@ class HeatTrackGenerator {
 
     onVisualSettingChange(e) {
         const settingName = e.target.id;
-        const value = parseInt(e.target.value);
+        const value = settingName === 'borderOffset' ? parseFloat(e.target.value) : parseInt(e.target.value);
         this.visualSettings[settingName] = value;
         
         if (this.trackData) {
