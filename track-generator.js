@@ -28,7 +28,8 @@ class HeatTrackGenerator {
             gapLength: 25,
             kerbWidth: 6,
             kerbDashLength: 15,
-            kerbGapLength: 10
+            kerbGapLength: 10,
+            whiteLineWidth: 20,
         };
         
         // Load saved settings or use defaults
@@ -59,6 +60,7 @@ class HeatTrackGenerator {
         document.getElementById('editMode').addEventListener('click', () => this.setMode('edit'));
         document.getElementById('curveMode').addEventListener('click', () => this.setMode('curve'));
         document.getElementById('kerbMode').addEventListener('click', () => this.setMode('kerb'));
+        document.getElementById('whiteLineMode').addEventListener('click', () => this.setMode('whiteLine'));
 
         // Export buttons
         document.getElementById('exportPNG').addEventListener('click', () => this.exportTrack('png'));
@@ -89,6 +91,7 @@ class HeatTrackGenerator {
         document.getElementById('kerbWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('kerbDashLength').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('kerbGapLength').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('whiteLineWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
         
         // Settings buttons
         document.getElementById('saveSettings').addEventListener('click', this.saveVisualSettings.bind(this));
@@ -545,6 +548,7 @@ class HeatTrackGenerator {
         this.renderCenterline(trackGroup);
         this.renderSegmentDivisions(trackGroup);
         this.renderKerbs(trackGroup);
+        this.renderWhiteLines(trackGroup);
 
         svg.appendChild(trackGroup);
     }
@@ -933,6 +937,9 @@ class HeatTrackGenerator {
 
             // Create kerb hit areas for kerb mode
             this.createKerbHitAreas(segment, group);
+            
+            // Create white line hit areas for white line mode
+            this.createWhiteLineHitAreas(segment, group);
 
             // // Add segment number
             // const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -996,7 +1003,8 @@ class HeatTrackGenerator {
         switch (this.currentMode) {
             case 'edit': return 'move';
             case 'curve':
-            case 'kerb': return 'pointer';
+            case 'kerb':
+            case 'whiteLine': return 'pointer';
             case 'pan': return 'grab';
             default: return 'crosshair';
         }
@@ -1068,6 +1076,7 @@ class HeatTrackGenerator {
         // Show/hide controls
         document.getElementById('curveControls').style.display = mode === 'curve' ? 'block' : 'none';
         document.getElementById('kerbControls').style.display = mode === 'kerb' ? 'block' : 'none';
+        document.getElementById('whiteLineControls').style.display = mode === 'whiteLine' ? 'block' : 'none';
         document.getElementById('editControls').style.display = mode === 'edit' ? 'block' : 'none';
         
         // Update cursors and pointer events
@@ -1119,6 +1128,14 @@ class HeatTrackGenerator {
                 handledByMode = true;
             } else if (element.classList.contains('kerb-hit-area')) {
                 this.handleKerbAreaSelection(element);
+                handledByMode = true;
+            }
+        } else if (this.currentMode === 'whiteLine') {
+            if (element.classList.contains('segment-line')) {
+                this.handleWhiteLineSelection(element);
+                handledByMode = true;
+            } else if (element.classList.contains('white-line-hit-area')) {
+                this.handleWhiteLineAreaSelection(element);
                 handledByMode = true;
             }
         } else if (this.currentMode === 'edit') {
@@ -1565,6 +1582,267 @@ class HeatTrackGenerator {
         this.draggedElement = null;
         
         svg.style.cursor = 'crosshair';
+    }
+
+    // White line methods (similar to kerb methods but for solid white lines)
+    handleWhiteLineAreaSelection(element) {
+        const segmentId = parseInt(element.getAttribute('data-segment-id'));
+        const side = element.getAttribute('data-side');
+        
+        const segment = this.trackData.segments.find(s => s.segment_number === segmentId);
+        if (!segment) return;
+        
+        // Initialize white line properties if they don't exist
+        if (!segment.has_white_line) {
+            segment.has_white_line = false;
+            segment.white_line_side = 'left'; // Default to left, but will be set by clicked side
+        }
+        
+        if (!segment.has_white_line) {
+            // First click: enable white line on the clicked side
+            segment.has_white_line = true;
+            segment.white_line_side = side;
+            this.showStatus(`Segment ${segmentId} white line added (${side} side)`, 'success');
+        } else {
+            // If clicking the same side, remove white line
+            if (segment.white_line_side === side) {
+                // Remove white line completely
+                segment.has_white_line = false;
+                this.showStatus(`Segment ${segmentId} white line removed`, 'success');
+            } else {
+                // Clicking the opposite side, switch to that side
+                segment.white_line_side = side;
+                this.showStatus(`Segment ${segmentId} white line switched to ${side} side`, 'success');
+            }
+        }
+        
+        this.renderTrack(true); // Preserve view when toggling white lines
+        
+        // Save session after white line changes
+        this.saveSession();
+    }
+
+    handleWhiteLineSelection(element) {
+        const segmentId = parseInt(element.getAttribute('data-segment-id'));
+        const segment = this.trackData.segments.find(s => s.segment_number === segmentId);
+        if (!segment) return;
+        
+        // Initialize white line properties if they don't exist
+        if (!segment.has_white_line) {
+            segment.has_white_line = false;
+            segment.white_line_side = 'left'; // Default to left
+        }
+        
+        if (!segment.has_white_line) {
+            // First click: enable white lines on left side (default)
+            segment.has_white_line = true;
+            segment.white_line_side = 'left';
+            this.showStatus(`Segment ${segmentId} white line added (left side)`, 'success');
+        } else {
+            // Cycle through white line options: left -> right -> off
+            switch (segment.white_line_side) {
+                case 'left':
+                    segment.white_line_side = 'right';
+                    this.showStatus(`Segment ${segmentId} white line: right side`, 'success');
+                    break;
+                case 'right':
+                    segment.has_white_line = false;
+                    segment.white_line_side = 'left'; // Reset to default
+                    this.showStatus(`Segment ${segmentId} white line removed`, 'success');
+                    break;
+                default:
+                    segment.has_white_line = false;
+                    segment.white_line_side = 'left'; // Reset to default
+                    this.showStatus(`Segment ${segmentId} white line removed`, 'success');
+                    break;
+            }
+        }
+        
+        this.renderTrack(true); // Preserve view when toggling white lines
+        
+        // Save session after white line changes
+        this.saveSession();
+    }
+
+    createWhiteLineHitAreas(segment, group) {
+        // Only create white line hit areas in white line mode
+        if (this.currentMode !== 'whiteLine') return;
+        
+        const segmentProgress = segment.distance || 0;
+        const totalLength = this.calculateTrackLength();
+        
+        // Calculate actual segment length based on next segment position
+        const currentSegmentIndex = this.trackData.segments.findIndex(s => s.segment_number === segment.segment_number);
+        const nextSegment = this.trackData.segments[currentSegmentIndex + 1];
+        
+        let segmentLength;
+        if (nextSegment) {
+            // Use distance to next segment
+            segmentLength = (nextSegment.distance || 0) - segmentProgress;
+        } else {
+            // For the last segment, use the default segment length
+            segmentLength = this.trackData.segment_length || 400;
+        }
+        
+        // Ensure positive segment length
+        segmentLength = Math.max(segmentLength, 10); // Minimum 10 units
+        
+        const startRatio = segmentProgress / totalLength;
+        const endRatio = Math.min((segmentProgress + segmentLength) / totalLength, 1);
+        
+        const trackBorderDistance = (this.trackData.track_width / 2);
+        const whiteLineDistance = trackBorderDistance + (this.visualSettings.whiteLineWidth / 2)
+        
+        // Create hit areas at the white line positions
+        const centerlineSegment = this.trackData.centerline.slice(
+            Math.floor(startRatio * (this.trackData.centerline.length - 1)),
+            Math.ceil(endRatio * (this.trackData.centerline.length - 1)) + 1
+        );
+        
+        // Create clickable areas along the track borders
+        const leftBorderSegment = this.createParallelLine(centerlineSegment, whiteLineDistance, 'left');
+        const rightBorderSegment = this.createParallelLine(centerlineSegment, whiteLineDistance, 'right');
+        
+        if (leftBorderSegment.length > 1) {
+            const leftHitArea = this.createPathFromPoints(leftBorderSegment);
+            leftHitArea.setAttribute('stroke', 'transparent');
+            leftHitArea.setAttribute('stroke-width', '20');
+            leftHitArea.setAttribute('fill', 'none');
+            leftHitArea.setAttribute('opacity', '0');
+            leftHitArea.setAttribute('class', 'white-line-hit-area');
+            leftHitArea.setAttribute('data-segment-id', segment.segment_number);
+            leftHitArea.setAttribute('data-side', 'left');
+            leftHitArea.style.cursor = 'pointer';
+            group.appendChild(leftHitArea);
+        }
+        
+        if (rightBorderSegment.length > 1) {
+            const rightHitArea = this.createPathFromPoints(rightBorderSegment);
+            rightHitArea.setAttribute('stroke', 'transparent');
+            rightHitArea.setAttribute('stroke-width', '20');
+            rightHitArea.setAttribute('fill', 'none');
+            rightHitArea.setAttribute('opacity', '0');
+            rightHitArea.setAttribute('class', 'white-line-hit-area');
+            rightHitArea.setAttribute('data-segment-id', segment.segment_number);
+            rightHitArea.setAttribute('data-side', 'right');
+            rightHitArea.style.cursor = 'pointer';
+            group.appendChild(rightHitArea);
+        }
+    }
+
+    renderWhiteLines(group) {
+        // Group contiguous white line segments and render them as unified white lines
+        const whiteLineSegments = this.trackData.segments.filter(s => s.has_white_line);
+        const contiguousGroups = this.groupContiguousWhiteLineSegments(whiteLineSegments);
+        
+        contiguousGroups.forEach(whiteLineGroup => {
+            this.createUnifiedWhiteLineForGroup(whiteLineGroup, group);
+        });
+    }
+
+    groupContiguousWhiteLineSegments(whiteLineSegments) {
+        if (whiteLineSegments.length === 0) return [];
+        
+        // Sort segments by their distance along the track
+        const sortedSegments = [...whiteLineSegments].sort((a, b) => (a.distance || 0) - (b.distance || 0));
+        
+        const groups = [];
+        let currentGroup = {
+            segments: [sortedSegments[0]],
+            sides: new Set([sortedSegments[0].white_line_side])
+        };
+        
+        for (let i = 1; i < sortedSegments.length; i++) {
+            const currentSegment = sortedSegments[i];
+            const previousSegment = currentGroup.segments[currentGroup.segments.length - 1];
+            
+            // Check if this segment is contiguous with the previous one
+            // and if they have compatible sides
+            if (this.areSegmentsContiguous(previousSegment, currentSegment) &&
+                this.doWhiteLineSidesOverlap(previousSegment.white_line_side, currentSegment.white_line_side)) {
+                
+                // Add to current group
+                currentGroup.segments.push(currentSegment);
+                currentGroup.sides.add(currentSegment.white_line_side);
+            } else {
+                // Start a new group
+                groups.push(currentGroup);
+                currentGroup = {
+                    segments: [currentSegment],
+                    sides: new Set([currentSegment.white_line_side])
+                };
+            }
+        }
+        
+        // Add the last group
+        groups.push(currentGroup);
+        
+        return groups;
+    }
+
+    doWhiteLineSidesOverlap(side1, side2) {
+        // White lines can only be on one side, so they only overlap if they're the same side
+        return side1 === side2;
+    }
+
+    createUnifiedWhiteLineForGroup(whiteLineGroup, group) {
+        // Calculate the combined boundaries of all segments in the group
+        const segments = whiteLineGroup.segments;
+        const firstSegment = segments[0];
+        const lastSegment = segments[segments.length - 1];
+        
+        // Calculate the start and end positions
+        const startDistance = firstSegment.distance || 0;
+        
+        // For end distance, calculate the actual end of the last segment
+        const lastSegmentIndex = this.trackData.segments.findIndex(s => s.segment_number === lastSegment.segment_number);
+        const nextSegment = this.trackData.segments[lastSegmentIndex + 1];
+        
+        let endDistance;
+        if (nextSegment) {
+            endDistance = nextSegment.distance || 0;
+        } else {
+            // For the last segment, add the segment length
+            endDistance = startDistance + (this.trackData.segment_length || 400);
+        }
+        
+        const totalLength = this.calculateTrackLength();
+        const startRatio = startDistance / totalLength;
+        const endRatio = Math.min(endDistance / totalLength, 1);
+        
+        // Determine which side to render (should be consistent across the group)
+        const side = firstSegment.white_line_side;
+        
+        // Calculate white line distance: start at track border and extend outward
+        const trackBorderDistance = (this.trackData.track_width / 2);
+        const whiteLineDistance = trackBorderDistance + (this.visualSettings.whiteLineWidth / 2)
+        
+        // Create unified white line path for the single side
+        const groupId = `white-line-group-${firstSegment.segment_number}-${lastSegment.segment_number}`;
+        this.createUnifiedWhiteLinePath(startRatio, endRatio, side, whiteLineDistance, group, groupId);
+    }
+
+    createUnifiedWhiteLinePath(startRatio, endRatio, side, whiteLineDistance, group, groupId) {
+        // Get the centerline segment for the unified white line
+        const centerlineStartIndex = Math.floor(startRatio * (this.trackData.centerline.length - 1));
+        const centerlineEndIndex = Math.ceil(endRatio * (this.trackData.centerline.length - 1));
+        
+        const centerlineSegment = this.trackData.centerline.slice(centerlineStartIndex, centerlineEndIndex + 1);
+        
+        if (centerlineSegment.length < 2) return;
+        
+        // Create white line path at the specified distance from centerline
+        const whiteLinePoints = this.createParallelLine(centerlineSegment, whiteLineDistance, side);
+        
+        if (whiteLinePoints.length > 1) {
+            const whiteLinePath = this.createPathFromPoints(whiteLinePoints);
+            whiteLinePath.setAttribute('stroke', 'white');
+            whiteLinePath.setAttribute('stroke-width', this.visualSettings.whiteLineWidth);
+            whiteLinePath.setAttribute('fill', 'none');
+            whiteLinePath.setAttribute('id', `${groupId}-${side}`);
+            whiteLinePath.setAttribute('class', 'white-line');
+            group.appendChild(whiteLinePath);
+        }
     }
 
     createKerbForSegment(segment, group) {
