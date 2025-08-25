@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heat: Pedal to the Metal - Track Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 350px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #764ba2;
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(118, 75, 162, 0.1);
+        }
+
+        .section h2 {
+            color: #764ba2;
+            font-size: 18px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #764ba2;
+            box-shadow: 0 0 0 3px rgba(118, 75, 162, 0.1);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(118, 75, 162, 0.4);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #ffeaa7 0%, #fab1a0 100%);
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            box-shadow: 0 5px 15px rgba(255, 193, 7, 0.4);
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .toolbar .btn {
+            flex: 1;
+            min-width: 100px;
+        }
+
+        .main-content {
+            flex: 1;
+            position: relative;
+            background: #555;
+        }
+
+        .canvas-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        #trackCanvas {
+            max-width: 100%;
+            max-height: 100%;
+            border: 2px solid #333;
+            background: #555;
+        }
+
+        .status {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            display: none;
+        }
+
+        .status.success {
+            background: #27ae60;
+        }
+
+        .status.error {
+            background: #e74c3c;
+        }
+
+        .loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            z-index: 1000;
+            display: none;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #764ba2;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .file-upload {
+            border: 2px dashed #764ba2;
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: rgba(118, 75, 162, 0.05);
+        }
+
+        .file-upload:hover {
+            border-color: #667eea;
+            background: rgba(118, 75, 162, 0.1);
+        }
+
+        .file-upload.dragover {
+            border-color: #667eea;
+            background: rgba(118, 75, 162, 0.15);
+            transform: scale(1.02);
+        }
+
+        .curve-controls {
+            display: none;
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #764ba2;
+        }
+
+        .curve-mode {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+        }
+
+        .curve-mode:hover {
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+        }
+
+        .settings-group {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #764ba2;
+        }
+
+        .settings-group h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .settings-group label {
+            display: block;
+            margin: 8px 0 5px 0;
+            font-size: 12px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .settings-group input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .settings-group input[type="number"]:focus {
+            outline: none;
+            border-color: #764ba2;
+            box-shadow: 0 0 0 2px rgba(118, 75, 162, 0.2);
+        }
+
+        .settings-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .settings-buttons .btn {
+            flex: 1;
+            min-width: 80px;
+            font-size: 12px;
+            padding: 8px 12px;
+        }
+
+        /* Edit mode styles */
+        .segment-number.draggable {
+            cursor: move !important;
+            transition: all 0.2s ease;
+        }
+
+        .segment-number.draggable:hover {
+            filter: drop-shadow(0 0 5px yellow);
+            transform: scale(1.1);
+        }
+
+        .segment-being-dragged {
+            opacity: 0.5 !important;
+            filter: drop-shadow(0 0 8px orange);
+        }
+
+        #dragPreview {
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="header">
+                <h1>🏁 Heat Track Generator</h1>
+                <p>Create custom racetracks for Heat: Pedal to the Metal</p>
+            </div>
+
+            <div class="section">
+                <h2>📂 SVG File</h2>
+                <div class="file-upload" id="fileUpload">
+                    <p>📎 Click or drag SVG file here</p>
+                    <input type="file" id="fileInput" accept=".svg" style="display: none;">
+                </div>
+                <div id="fileName" style="margin-top: 10px; font-size: 12px; color: #666;"></div>
+            </div>
+
+            <div class="section">
+                <h2>⚙️ Track Settings</h2>
+                <div class="form-group">
+                    <label for="trackWidth">Track Width</label>
+                    <input type="number" id="trackWidth" value="200" min="50" max="500" step="10">
+                </div>
+                <div class="form-group">
+                    <label for="segmentLength">Segment Length</label>
+                    <input type="number" id="segmentLength" value="400" min="100" max="1000" step="50">
+                </div>
+                <button class="btn" id="generateBtn" disabled>🎯 Generate Track</button>
+            </div>
+
+            <div class="section">
+                <h2>🏎️ Track Tools</h2>
+                <div class="toolbar">
+                    <button class="btn btn-secondary" id="panMode">✋ Pan</button>
+                    <button class="btn btn-secondary" id="editMode">✏️ Edit</button>
+                    <button class="btn curve-mode" id="curveMode">🌀 Curves</button>
+                    <button class="btn btn-secondary" id="outlineMode">📏 Track Outline</button>
+                </div>
+                
+                <div class="curve-controls" id="curveControls">
+                    <div class="form-group">
+                        <label for="speedLimit">Speed Limit</label>
+                        <select id="speedLimit">
+                            <option value="1">1 (Hairpin)</option>
+                            <option value="2">2 (Tight)</option>
+                            <option value="3" selected>3 (Medium)</option>
+                            <option value="4">4 (Fast)</option>
+                        </select>
+                    </div>
+                    <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                        Click a segment line to toggle curve marking
+                    </p>
+                </div>
+                
+                <div class="curve-controls" id="outlineControls" style="display: none;">
+                    <div class="form-group">
+                        <label>Track Outline</label>
+                        <p style="font-size: 12px; color: #666; margin: 5px 0;">
+                            Add red & white dashed outline to track borders
+                        </p>
+                    </div>
+                    <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                        Click segment areas to toggle track outline
+                    </p>
+                </div>
+                
+                <div class="curve-controls" id="editControls" style="display: none;">
+                    <div class="form-group">
+                        <label>Edit Segments</label>
+                        <p style="font-size: 12px; color: #666; margin: 5px 0;">
+                            Drag and drop segments to reposition them along the track
+                        </p>
+                    </div>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <button class="btn btn-secondary" id="clearDebugBtn" style="width: 100%; font-size: 11px;">
+                            🐛 Clear Debug Points
+                        </button>
+                    </div>
+                    <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                        Click and drag segment numbers or lines to move them
+                    </p>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>🎨 Visual Settings</h2>
+                <div class="settings-group">
+                    <h3>Text Settings</h3>
+                    <label for="segmentNumberSize">Segment Number Size:</label>
+                    <input type="number" id="segmentNumberSize" min="8" max="20" value="12">
+                    
+                    <label for="speedLimitSize">Speed Limit Size:</label>
+                    <input type="number" id="speedLimitSize" min="20" max="100" value="64">
+                </div>
+                
+                <div class="settings-group">
+                    <h3>Line Settings</h3>
+                    <label for="normalSegmentWidth">Normal Segment Width:</label>
+                    <input type="number" id="normalSegmentWidth" min="1" max="20" value="8">
+                    
+                    <label for="curveSegmentWidth">Curve Segment Width:</label>
+                    <input type="number" id="curveSegmentWidth" min="5" max="50" value="25">
+                    
+                    <label for="borderWidth">Border Width:</label>
+                    <input type="number" id="borderWidth" min="1" max="15" value="5">
+                    
+                    <label for="centerlineWidth">Centerline Width:</label>
+                    <input type="number" id="centerlineWidth" min="3" max="20" value="10">
+                </div>
+                
+                <div class="settings-group">
+                    <h3>Centerline Dash</h3>
+                    <label for="dashLength">Dash Length:</label>
+                    <input type="number" id="dashLength" min="10" max="50" value="25">
+                    
+                    <label for="gapLength">Gap Length:</label>
+                    <input type="number" id="gapLength" min="10" max="50" value="25">
+                </div>
+                
+                <div class="settings-group">
+                    <h3>Track Outline</h3>
+                    <label for="trackOutlineWidth">Outline Width:</label>
+                    <input type="number" id="trackOutlineWidth" min="2" max="15" value="6">
+                    
+                    <label for="trackOutlineDashLength">Outline Dash Length:</label>
+                    <input type="number" id="trackOutlineDashLength" min="5" max="30" value="15">
+                    
+                    <label for="trackOutlineGapLength">Outline Gap Length:</label>
+                    <input type="number" id="trackOutlineGapLength" min="5" max="30" value="10">
+                </div>
+                
+                <div class="settings-buttons">
+                    <button class="btn btn-secondary" id="saveSettings">💾 Save Settings</button>
+                    <button class="btn btn-secondary" id="loadSettings">📂 Load Settings</button>
+                    <button class="btn btn-secondary" id="resetSettings">🔄 Reset to Default</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>💾 Export</h2>
+                <button class="btn btn-secondary" id="exportPNG">📷 Export PNG</button>
+                <button class="btn btn-secondary" id="exportSVG">🖼️ Export SVG</button>
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Processing...</p>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="canvas-container">
+                <svg id="trackCanvas" viewBox="0 0 1000 800" preserveAspectRatio="xMidYMid meet">
+                    <defs>
+                        <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
+                            <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#e0e0e0" stroke-width="1"/>
+                        </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#grid)" />
+                    <text x="50%" y="50%" text-anchor="middle" fill="#ccc" font-size="24" font-family="Arial">
+                        Upload an SVG file to get started
+                    </text>
+                </svg>
+            </div>
+        </div>
+    </div>
+
+    <div class="status" id="status"></div>
+
+    <script src="track-generator.js"></script>
+</body>
+</html>
