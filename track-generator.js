@@ -271,6 +271,9 @@ class HeatTrackGenerator {
             // Divide track into segments
             this.divideTrackIntoSegments(segmentLength, trackWidth);
             
+            // Calculate spaces to next curve for each segment
+            this.calculateSpacesToNextCurve();
+            
             // Create track data object
             this.trackData = {
                 centerline: this.centerlinePoints,
@@ -466,8 +469,10 @@ class HeatTrackGenerator {
                 distance: targetDistance,
                 is_curve: false,
                 speed_limit: 0,
-                has_kerb: false,
-                kerb_side: 'both' // 'left', 'right', or 'both'
+                has_kerb: true,
+                kerb_side: 'both', // 'left', 'right', or 'both'
+                has_white_line: true,
+                white_line_side: 'right' // 'left' or 'right'
             });
         }
         
@@ -506,6 +511,38 @@ class HeatTrackGenerator {
         if (segmentDivisions.length === 0) {
             console.warn('No segments were created - check input parameters');
         }
+    }
+
+    // Calculate spaces to next curve for each segment
+    calculateSpacesToNextCurve() {
+        if (!this.segmentDivisions || this.segmentDivisions.length === 0) {
+            return;
+        }
+
+        this.segmentDivisions.forEach((segment, index) => {
+            let spacesToNextCurve = 0;
+            let foundCurve = false;
+            
+            // Look ahead from current segment to find next curve
+            for (let i = 1; i < this.segmentDivisions.length; i++) {
+                const nextIndex = (index + i) % this.segmentDivisions.length;
+                const nextSegment = this.segmentDivisions[nextIndex];
+                
+                if (nextSegment.is_curve) {
+                    spacesToNextCurve = i - 1; // -1 because we don't count the curve segment itself
+                    foundCurve = true;
+                    break;
+                }
+                
+                // If we've gone full circle without finding a curve, break
+                if (nextIndex === index) {
+                    break;
+                }
+            }
+            
+            // If no curve found in the entire track, set to null or -1
+            segment.spacesToNextCurve = foundCurve ? spacesToNextCurve : null;
+        });
     }
 
     renderTrack(preserveView = false) {
@@ -964,6 +1001,83 @@ class HeatTrackGenerator {
         };
     }
 
+    // Calculate the midpoint between current segment and next segment along the centerline spline
+    calculateSegmentNumberPosition(segment) {
+        if (!this.trackData || !this.trackData.segments || !this.centerlinePoints) return null;
+        
+        const currentSegmentIndex = this.trackData.segments.findIndex(s => s.segment_number === segment.segment_number);
+        if (currentSegmentIndex === -1) return null;
+        
+        // Get the next segment (with wrapping for closed tracks)
+        const nextSegmentIndex = (currentSegmentIndex + 1) % this.trackData.segments.length;
+        const nextSegment = this.trackData.segments[nextSegmentIndex];
+        
+        // Calculate distances along the centerline for both segments
+        const currentDistance = segment.distance || 0;
+        const nextDistance = nextSegment.distance || 0;
+        
+        // Calculate the midpoint distance between segments
+        let midDistance;
+        if (nextDistance > currentDistance) {
+            // Normal case - next segment is further along
+            midDistance = (currentDistance + nextDistance) / 2;
+        } else {
+            // Wrap-around case for closed tracks
+            const totalLength = this.calculateTrackLength();
+            const adjustedNextDistance = nextDistance + totalLength;
+            midDistance = (currentDistance + adjustedNextDistance) / 2;
+            if (midDistance > totalLength) {
+                midDistance -= totalLength;
+            }
+        }
+        
+        // Find the point on the centerline at this distance
+        return this.findPointAtDistance(midDistance);
+    }
+    
+    // Find a point at a specific distance along the centerline
+    findPointAtDistance(targetDistance) {
+        if (!this.centerlinePoints || this.centerlinePoints.length < 2) return null;
+        
+        // Calculate cumulative distances
+        const distances = [0];
+        for (let i = 1; i < this.centerlinePoints.length; i++) {
+            const prev = this.centerlinePoints[i - 1];
+            const curr = this.centerlinePoints[i];
+            const dist = Math.sqrt(
+                Math.pow(curr[0] - prev[0], 2) + 
+                Math.pow(curr[1] - prev[1], 2)
+            );
+            distances.push(distances[distances.length - 1] + dist);
+        }
+        
+        const totalLength = distances[distances.length - 1];
+        
+        // Handle wrap-around for closed tracks
+        const normalizedDistance = targetDistance % totalLength;
+        
+        // Find the segment containing this distance
+        for (let i = 0; i < distances.length - 1; i++) {
+            if (normalizedDistance >= distances[i] && normalizedDistance <= distances[i + 1]) {
+                // Interpolate between points i and i+1
+                const segmentDistance = distances[i + 1] - distances[i];
+                if (segmentDistance === 0) return this.centerlinePoints[i];
+                
+                const t = (normalizedDistance - distances[i]) / segmentDistance;
+                const p1 = this.centerlinePoints[i];
+                const p2 = this.centerlinePoints[i + 1];
+                
+                return [
+                    p1[0] + t * (p2[0] - p1[0]),
+                    p1[1] + t * (p2[1] - p1[1])
+                ];
+            }
+        }
+        
+        // Fallback to last point
+        return this.centerlinePoints[this.centerlinePoints.length - 1];
+    }
+
     createKerbHitAreas(segment, group) {
         // Only create kerb hit areas in kerb mode
         if (this.currentMode !== 'kerb') return;
@@ -1073,10 +1187,13 @@ class HeatTrackGenerator {
             // Create white line hit areas for white line mode
             this.createWhiteLineHitAreas(segment, group);
 
-            // Add segment number
+            // Add segment number with spaces to next curve
+            const numberPosition = this.calculateSegmentNumberPosition(segment);
+            if (!numberPosition) return; // Skip if position calculation failed
+            
             const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', lineCoords.center_point[0]);
-            text.setAttribute('y', lineCoords.center_point[1]);
+            text.setAttribute('x', numberPosition[0]);
+            text.setAttribute('y', numberPosition[1]);
             text.setAttribute('text-anchor', 'middle');
             text.setAttribute('dominant-baseline', 'middle');
             text.setAttribute('fill', 'white');
@@ -1088,7 +1205,24 @@ class HeatTrackGenerator {
             text.setAttribute('stroke-width', '0.5');
             text.style.pointerEvents = this.currentMode === 'edit' ? 'auto' : 'none';
             text.style.cursor = this.currentMode === 'edit' ? 'move' : 'default';
-            text.textContent = segment.segment_number;
+            
+            // Create main segment number line
+            const segmentNumberLine = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+            segmentNumberLine.setAttribute('x', numberPosition[0]);
+            segmentNumberLine.setAttribute('dy', '0');
+            segmentNumberLine.textContent = segment.segment_number.toString();
+            text.appendChild(segmentNumberLine);
+            
+            // Add spaces to next curve info if available
+            if (segment.spacesToNextCurve !== null && segment.spacesToNextCurve !== undefined) {
+                const spacesLine = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                spacesLine.setAttribute('x', numberPosition[0]);
+                spacesLine.setAttribute('dy', this.visualSettings.segmentNumberSize + 2); // Move down to next line
+                spacesLine.setAttribute('font-size', Math.max(8, this.visualSettings.segmentNumberSize * 0.7)); // Smaller font for spaces info
+                spacesLine.textContent = `(${segment.spacesToNextCurve})`;
+                text.appendChild(spacesLine);
+            }
+            
             group.appendChild(text);
             
             // Add speed limit text for curves
@@ -1369,7 +1503,13 @@ class HeatTrackGenerator {
             segment.speed_limit = segment.speed_limit || parseInt(document.getElementById('speedLimit').value);
         }
         
+        // Recalculate spaces to next curve for all segments since curve status changed
+        this.calculateSpacesToNextCurve();
+        
         this.updateSegmentVisual(segmentId, segment);
+        
+        // Re-render the track to update all segment displays
+        this.renderTrack(true); // preserve view
         
         // Save session after curve changes
         this.saveSession();
