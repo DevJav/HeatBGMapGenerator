@@ -680,6 +680,59 @@ class HeatTrackGenerator {
         };
     }
 
+    createKerbHitAreas(segment, group) {
+        // Only create kerb hit areas in kerb mode
+        if (this.currentMode !== 'kerb') return;
+        
+        const segmentProgress = segment.distance || 0;
+        const totalLength = this.calculateTrackLength();
+        const segmentLength = this.trackData.segment_length || 400;
+        
+        const startRatio = segmentProgress / totalLength;
+        const endRatio = Math.min((segmentProgress + segmentLength) / totalLength, 1);
+        
+        // Use white border distance for hit area positioning
+        const borderDistance = (this.trackData.track_width / 2) * this.visualSettings.borderOffset;
+        
+        // Create hit areas at the white border positions
+        const centerlineSegment = this.trackData.centerline.slice(
+            Math.floor(startRatio * (this.trackData.centerline.length - 1)),
+            Math.ceil(endRatio * (this.trackData.centerline.length - 1)) + 1
+        );
+        
+        // Create clickable areas along the track borders
+        const leftBorderSegment = this.createParallelLine(centerlineSegment, borderDistance, 'left');
+        const rightBorderSegment = this.createParallelLine(centerlineSegment, borderDistance, 'right');
+        
+        if (leftBorderSegment.length > 1) {
+            const leftPath = this.createPathFromPoints(leftBorderSegment);
+            leftPath.setAttribute('stroke', 'transparent');
+            leftPath.setAttribute('stroke-width', '20'); // Wide clickable area
+            leftPath.setAttribute('fill', 'none');
+            leftPath.setAttribute('opacity', '0');
+            leftPath.setAttribute('class', 'kerb-hit-area');
+            leftPath.setAttribute('data-segment-id', segment.segment_number);
+            leftPath.setAttribute('data-kerb-side', 'left');
+            leftPath.style.cursor = 'pointer';
+            leftPath.style.pointerEvents = 'auto';
+            group.appendChild(leftPath);
+        }
+        
+        if (rightBorderSegment.length > 1) {
+            const rightPath = this.createPathFromPoints(rightBorderSegment);
+            rightPath.setAttribute('stroke', 'transparent');
+            rightPath.setAttribute('stroke-width', '20'); // Wide clickable area
+            rightPath.setAttribute('fill', 'none');
+            rightPath.setAttribute('opacity', '0');
+            rightPath.setAttribute('class', 'kerb-hit-area');
+            rightPath.setAttribute('data-segment-id', segment.segment_number);
+            rightPath.setAttribute('data-kerb-side', 'right');
+            rightPath.style.cursor = 'pointer';
+            rightPath.style.pointerEvents = 'auto';
+            group.appendChild(rightPath);
+        }
+    }
+
     renderSegmentDivisions(group) {
         this.trackData.segments.forEach(segment => {
             // Calculate line coordinates dynamically
@@ -700,7 +753,7 @@ class HeatTrackGenerator {
             line.style.pointerEvents = 'none';
             group.appendChild(line);
 
-            // Create invisible hit area for easier selection
+            // Create invisible hit area for easier selection (for curve and edit modes)
             const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'line');
             hitArea.setAttribute('x1', lineCoords.line_start[0]);
             hitArea.setAttribute('y1', lineCoords.line_start[1]);
@@ -713,6 +766,9 @@ class HeatTrackGenerator {
             hitArea.setAttribute('data-segment-id', segment.segment_number);
             hitArea.style.cursor = this.getCursorForMode();
             group.appendChild(hitArea);
+
+            // Create kerb hit areas for kerb mode
+            this.createKerbHitAreas(segment, group);
 
             // // Add segment number
             // const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -871,6 +927,11 @@ class HeatTrackGenerator {
                 text.classList.remove('draggable');
             }
         });
+        
+        // Re-render track to update kerb hit areas based on new mode
+        if (this.trackData) {
+            this.renderTrack(true);
+        }
     }
 
     handleMouseDown(e) {
@@ -888,6 +949,8 @@ class HeatTrackGenerator {
             const element = e.target;
             if (element.classList.contains('segment-line')) {
                 this.handleKerbSelection(element);
+            } else if (element.classList.contains('kerb-hit-area')) {
+                this.handleKerbAreaSelection(element);
             }
         } else if (this.currentMode === 'edit') {
             const element = e.target;
@@ -976,6 +1039,39 @@ class HeatTrackGenerator {
         
         this.updateSegmentVisual(segmentId, segment);
         this.showStatus(`Segment ${segmentId} ${segment.is_curve ? 'marked as curve' : 'unmarked as curve'}`, 'success');
+    }
+
+    handleKerbAreaSelection(element) {
+        const segmentId = parseInt(element.getAttribute('data-segment-id'));
+        const clickedSide = element.getAttribute('data-kerb-side');
+        const segment = this.trackData.segments.find(s => s.segment_number === segmentId);
+        if (!segment) return;
+        
+        // Toggle kerb on the clicked side
+        if (!segment.has_kerb) {
+            // No kerbs yet, add kerb to clicked side
+            segment.has_kerb = true;
+            segment.kerb_side = clickedSide;
+            this.showStatus(`Segment ${segmentId} kerb added (${clickedSide} side)`, 'success');
+        } else {
+            // Already has kerbs, check current configuration
+            if (segment.kerb_side === clickedSide) {
+                // Clicking the same side that already has kerbs - remove them
+                segment.has_kerb = false;
+                segment.kerb_side = 'both';
+                this.showStatus(`Segment ${segmentId} kerb removed`, 'success');
+            } else if (segment.kerb_side === 'both') {
+                // Has kerbs on both sides, switch to only the clicked side
+                segment.kerb_side = clickedSide;
+                this.showStatus(`Segment ${segmentId} kerb: ${clickedSide} side only`, 'success');
+            } else {
+                // Has kerbs on opposite side, add to both sides
+                segment.kerb_side = 'both';
+                this.showStatus(`Segment ${segmentId} kerbs: both sides`, 'success');
+            }
+        }
+        
+        this.renderTrack(true); // Preserve view when toggling kerb
     }
 
     handleKerbSelection(element) {
@@ -1279,15 +1375,39 @@ class HeatTrackGenerator {
         const startRatio = segmentProgress / totalLength;
         const endRatio = Math.min((segmentProgress + segmentLength) / totalLength, 1);
         
-        const leftBorderSegment = this.getTrackBorderSegment(this.trackData.left_border, startRatio, endRatio);
-        const rightBorderSegment = this.getTrackBorderSegment(this.trackData.right_border, startRatio, endRatio);
+        // Calculate border distance for white track borders
+        const borderDistance = (this.trackData.track_width / 2) * this.visualSettings.borderOffset;
         
-        // Add kerbs based on the selected side
-        if ((segment.kerb_side === 'left' || segment.kerb_side === 'both') && leftBorderSegment.length > 1) {
-            this.createKerbPath(leftBorderSegment, `left-kerb-${segment.segment_number}`, group);
+        // Create kerb paths that start at the white border and extend outward
+        if (segment.kerb_side === 'left' || segment.kerb_side === 'both') {
+            this.createKerbPathAtBorder(segment, 'left', borderDistance, group);
         }
-        if ((segment.kerb_side === 'right' || segment.kerb_side === 'both') && rightBorderSegment.length > 1) {
-            this.createKerbPath(rightBorderSegment, `right-kerb-${segment.segment_number}`, group);
+        if (segment.kerb_side === 'right' || segment.kerb_side === 'both') {
+            this.createKerbPathAtBorder(segment, 'right', borderDistance, group);
+        }
+    }
+
+    createKerbPathAtBorder(segment, side, borderDistance, group) {
+        const segmentProgress = segment.distance || 0;
+        const totalLength = this.calculateTrackLength();
+        const segmentLength = this.trackData.segment_length || 400;
+        
+        const startRatio = segmentProgress / totalLength;
+        const endRatio = Math.min((segmentProgress + segmentLength) / totalLength, 1);
+        
+        // Calculate the kerb offset: position kerb so its inner edge aligns with the outer edge of the white border
+        // Account for the border line stroke width
+        const borderStrokeWidth = this.visualSettings.borderWidth || 2;
+        const kerbOffset = borderDistance - (borderStrokeWidth / 2) + (this.visualSettings.kerbWidth / 2);
+        
+        // Create kerb path at the correct distance from centerline
+        const kerbPoints = this.createParallelLine(this.trackData.centerline.slice(
+            Math.floor(startRatio * (this.trackData.centerline.length - 1)),
+            Math.ceil(endRatio * (this.trackData.centerline.length - 1)) + 1
+        ), kerbOffset, side);
+        
+        if (kerbPoints.length > 1) {
+            this.createKerbPath(kerbPoints, `${side}-kerb-${segment.segment_number}`, group);
         }
     }
 
