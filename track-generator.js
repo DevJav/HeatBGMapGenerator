@@ -606,26 +606,13 @@ class HeatTrackGenerator {
     }
 
     createSegmentFillPath(segment) {
-        const totalLength = this.calculateTrackLength();
+        const totalSegments = this.trackData.segments.length;
+        const currentSegmentIndex = this.trackData.segments.findIndex(s => s.segment_number === segment.segment_number);
         
-        // Calculate segment boundaries based on actual distance position, not array index
-        const segmentDistance = segment.distance || 0;
-        
-        // Calculate segment length
-        const sortedSegments = [...this.trackData.segments].sort((a, b) => (a.distance || 0) - (b.distance || 0));
-        const segmentIndex = sortedSegments.findIndex(s => s.segment_number === segment.segment_number);
-        const nextSegment = sortedSegments[segmentIndex + 1];
-        
-        let segmentLength;
-        if (nextSegment) {
-            segmentLength = (nextSegment.distance || 0) - segmentDistance;
-        } else {
-            // For the last segment, use remaining track length
-            segmentLength = totalLength - segmentDistance;
-        }
-        
-        const startRatio = segmentDistance / totalLength;
-        const endRatio = Math.min((segmentDistance + segmentLength) / totalLength, 1);
+        // Calculate the segment boundaries based on index, not distance
+        const segmentRatio = 1 / totalSegments;
+        const startRatio = currentSegmentIndex * segmentRatio;
+        const endRatio = (currentSegmentIndex + 1) * segmentRatio;
         
         // Make sure we don't exceed the array bounds
         const leftBorderLength = this.trackData.left_border.length;
@@ -641,6 +628,16 @@ class HeatTrackGenerator {
         const rightBorderPoints = this.trackData.right_border.slice(rightStartIndex, rightEndIndex + 1);
         
         if (!leftBorderPoints.length || !rightBorderPoints.length) return null;
+        
+        // For the last segment, make sure we include the final points
+        if (currentSegmentIndex === totalSegments - 1) {
+            if (leftEndIndex < leftBorderLength - 1) {
+                leftBorderPoints.push(this.trackData.left_border[leftBorderLength - 1]);
+            }
+            if (rightEndIndex < rightBorderLength - 1) {
+                rightBorderPoints.push(this.trackData.right_border[rightBorderLength - 1]);
+            }
+        }
         
         // Create path: start from left border, go to end of left border, then reverse along right border back to start
         const allPoints = [
@@ -968,7 +965,8 @@ class HeatTrackGenerator {
             // Calculate line coordinates dynamically
             const lineCoords = this.calculateSegmentLineCoordinates(segment);
             if (!lineCoords) return; // Skip if calculation failed
-            
+            console.log('Line coordinates:', lineCoords.line_start, lineCoords.line_end);
+
             // Create visible segment line
             const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
             line.setAttribute('x1', lineCoords.line_start[0]);
@@ -1525,9 +1523,9 @@ class HeatTrackGenerator {
         previewCircle.setAttribute('cy', closestPoint.point[1]);
         previewCircle.setAttribute('r', '15');
         previewCircle.setAttribute('fill', 'yellow');
-        previewCircle.setAttribute('stroke', 'orange');
-        previewCircle.setAttribute('stroke-width', '3');
-        previewCircle.setAttribute('opacity', '0.7');
+        previewCircle.setAttribute('stroke', 'black');
+        previewCircle.setAttribute('stroke-width', '2');
+        previewCircle.setAttribute('opacity', '0.5');
         previewCircle.setAttribute('transform', `translate(${this.panX}, ${this.panY}) scale(${this.scale})`);
         previewGroup.appendChild(previewCircle);
     }
