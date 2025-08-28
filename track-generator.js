@@ -79,6 +79,17 @@ class HeatTrackGenerator {
         // Export buttons
         document.getElementById('exportPNG').addEventListener('click', () => this.exportTrack('png'));
         document.getElementById('exportSVG').addEventListener('click', () => this.exportTrack('svg'));
+        
+        // Save/Load track buttons
+        document.getElementById('saveTrack').addEventListener('click', (e) => {
+            e.preventDefault(); // Prevent any default behavior
+            this.saveTrackToFile();
+        });
+        document.getElementById('loadTrack').addEventListener('click', (e) => {
+            e.preventDefault(); // Prevent any default behavior
+            document.getElementById('trackFileInput').click();
+        });
+        document.getElementById('trackFileInput').addEventListener('change', (e) => this.loadTrackFromFile(e));
 
         // Session management
         document.getElementById('clearSession').addEventListener('click', () => {
@@ -2808,6 +2819,157 @@ class HeatTrackGenerator {
     clearSession() {
         localStorage.removeItem('heatTrackSession');
         this.showStatus('Session cleared', 'success');
+    }
+
+    // Track save/load methods
+    saveTrackToFile() {
+        if (!this.trackData || !this.centerlinePoints) {
+            this.showStatus('No track data to save. Please load a track first.', 'error');
+            return;
+        }
+
+        try {
+            // Create comprehensive track data including all modifications
+            const trackSaveData = {
+                version: "1.0",
+                timestamp: Date.now(),
+                centerlinePoints: this.centerlinePoints,
+                trackData: this.trackData,
+                visualSettings: this.visualSettings,
+                metadata: {
+                    trackWidth: this.trackData.track_width,
+                    segmentLength: this.trackData.segment_length,
+                    totalSegments: this.trackData.segments.length,
+                    curvesCount: this.trackData.segments.filter(s => s.is_curve).length,
+                    kerbsCount: this.trackData.segments.filter(s => s.has_kerb).length,
+                    whiteLinesCount: this.trackData.segments.filter(s => s.has_white_line).length
+                }
+            };
+
+            // Convert to JSON string
+            const jsonString = JSON.stringify(trackSaveData, null, 2);
+            
+            // Create blob and download
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            // Create filename with timestamp
+            const now = new Date();
+            const timestamp = now.toISOString().slice(0, 19).replace(/[:-]/g, '');
+            const filename = `heat_track_${timestamp}.json`;
+            
+            // Create download link and trigger download
+            const downloadLink = document.createElement('a');
+            downloadLink.href = url;
+            downloadLink.download = filename;
+            downloadLink.style.display = 'none'; // Make sure link is hidden
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            
+            // Clean up after a short delay to ensure download starts
+            setTimeout(() => {
+                document.body.removeChild(downloadLink);
+                URL.revokeObjectURL(url);
+            }, 100);
+            
+            this.showStatus(`Track saved as ${filename}`, 'success');
+            
+            // Ensure track remains visible after save and save session
+            if (this.trackData && this.centerlinePoints) {
+                // Save session to prevent any loss
+                this.saveSession();
+                
+                // Store references to prevent garbage collection
+                const trackDataBackup = this.trackData;
+                const centerlineBackup = this.centerlinePoints;
+                
+                // Re-render track to ensure it stays visible
+                setTimeout(() => {
+                    // Double-check that data is still there
+                    if (!this.trackData || !this.centerlinePoints) {
+                        console.warn('Track data was cleared after save, restoring from backup');
+                        this.trackData = trackDataBackup;
+                        this.centerlinePoints = centerlineBackup;
+                    }
+                    
+                    if (this.trackData && this.centerlinePoints) {
+                        this.renderTrack(true); // Preserve view
+                    }
+                }, 200);
+            }
+            
+        } catch (error) {
+            console.error('Error saving track:', error);
+            this.showStatus('Failed to save track', 'error');
+        }
+    }
+
+    async loadTrackFromFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        try {
+            // Read the file
+            const fileContent = await this.readFileAsText(file);
+            const trackData = JSON.parse(fileContent);
+            
+            // Validate the file format
+            if (!trackData.version || !trackData.centerlinePoints || !trackData.trackData) {
+                throw new Error('Invalid track file format');
+            }
+            
+            // Load the track data
+            this.centerlinePoints = trackData.centerlinePoints;
+            this.trackData = trackData.trackData;
+            
+            // Load visual settings if available
+            if (trackData.visualSettings) {
+                this.visualSettings = { ...this.visualSettings, ...trackData.visualSettings };
+                this.applySettingsToUI(this.visualSettings);
+            }
+            
+            // Update UI controls with loaded track settings
+            if (this.trackData.track_width) {
+                const trackWidthInput = document.getElementById('trackWidth');
+                if (trackWidthInput) trackWidthInput.value = this.trackData.track_width;
+            }
+            
+            if (this.trackData.segment_length) {
+                const segmentLengthInput = document.getElementById('segmentLength');
+                if (segmentLengthInput) segmentLengthInput.value = this.trackData.segment_length;
+            }
+            
+            // Show centerline preview
+            this.showCenterlinePreview();
+            
+            // Render the track with all modifications
+            this.renderTrack();
+            
+            // Set default mode to curve for immediate editing
+            this.setMode('curve');
+            
+            // Save to session for persistence
+            this.saveSession();
+            
+            // Show success message with metadata
+            const metadata = trackData.metadata;
+            let statusMessage = `Track loaded successfully!`;
+            if (metadata) {
+                statusMessage += ` (${metadata.totalSegments} segments, ${metadata.curvesCount} curves`;
+                if (metadata.kerbsCount > 0) statusMessage += `, ${metadata.kerbsCount} kerbs`;
+                if (metadata.whiteLinesCount > 0) statusMessage += `, ${metadata.whiteLinesCount} white lines`;
+                statusMessage += ')';
+            }
+            
+            this.showStatus(statusMessage, 'success');
+            
+        } catch (error) {
+            console.error('Error loading track:', error);
+            this.showStatus('Failed to load track file. Please check the file format.', 'error');
+        } finally {
+            // Clear the file input so the same file can be loaded again
+            event.target.value = '';
+        }
     }
 
     // Utility methods

@@ -670,6 +670,15 @@
                             <span>🖼️</span>
                             Export SVG
                         </button>
+                        <div style="border-top: 1px solid #3a3a3a; margin: 5px 0;"></div>
+                        <button type="button" class="export-menu-item" id="saveTrackFromMenu">
+                            <span>💾</span>
+                            Save Track
+                        </button>
+                        <button type="button" class="export-menu-item" id="loadTrackFromMenu">
+                            <span>📂</span>
+                            Load Track
+                        </button>
                     </div>
                 </div>
                 <button class="quick-action primary" id="quickGenerate">
@@ -942,6 +951,15 @@
                         <span>🖼️</span>
                         Export SVG
                     </button>
+                    <button type="button" class="btn primary" id="saveTrack">
+                        <span>💾</span>
+                        Save Track
+                    </button>
+                    <button type="button" class="btn primary" id="loadTrack">
+                        <span>📂</span>
+                        Load Track
+                    </button>
+                    <input type="file" id="trackFileInput" accept=".json" style="display: none;">
                 </div>
             </div>
 
@@ -1053,6 +1071,18 @@
             document.getElementById('exportSVGFromMenu').addEventListener('click', function() {
                 exportMenu.classList.remove('show');
                 document.getElementById('exportSVG').click();
+            });
+            
+            document.getElementById('saveTrackFromMenu').addEventListener('click', function(e) {
+                e.preventDefault(); // Prevent any default behavior
+                exportMenu.classList.remove('show');
+                document.getElementById('saveTrack').click();
+            });
+            
+            document.getElementById('loadTrackFromMenu').addEventListener('click', function(e) {
+                e.preventDefault(); // Prevent any default behavior
+                exportMenu.classList.remove('show');
+                document.getElementById('loadTrack').click();
             });
             
             // Section collapsing
