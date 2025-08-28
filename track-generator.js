@@ -19,6 +19,7 @@ class HeatTrackGenerator {
         this.defaultSettings = {
             segmentNumberSize: 38,
             segmentNumberOffset: 140, // Distance to offset numbers from centerline
+            distanceSignSize: 60, // Size of the distance sign image
             speedLimitSize: 64,
             speedLimitOffset: 160, // Distance to offset speed limits from centerline
             normalSegmentWidth: 8,
@@ -1320,35 +1321,16 @@ class HeatTrackGenerator {
             const numberInfo = this.calculateSegmentNumberPosition(segment);
             if (!numberInfo) return; // Skip if position calculation failed
             
-            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', numberInfo.position[0]);
-            text.setAttribute('y', numberInfo.position[1]);
-            
-            // Calculate rotation angle from direction vector
-            const angle = Math.atan2(numberInfo.direction[1], numberInfo.direction[0]) * 180 / Math.PI;
-            text.setAttribute('transform', `rotate(${angle} ${numberInfo.position[0]} ${numberInfo.position[1]})`);
-            
-            text.setAttribute('text-anchor', 'middle');
-            text.setAttribute('dominant-baseline', 'middle');
-            text.setAttribute('fill', this.visualSettings.segmentNumberColor);
-            text.setAttribute('font-size', this.visualSettings.segmentNumberSize);
-            text.setAttribute('font-weight', 'bold');
-            text.setAttribute('class', `segment-number ${this.currentMode === 'edit' ? 'draggable' : ''}`);
-            text.setAttribute('data-segment-id', segment.segment_number);
-            text.setAttribute('stroke', 'black');
-            text.setAttribute('stroke-width', '0.5');
-            text.style.pointerEvents = (this.currentMode === 'edit' || this.currentMode === 'curve') ? 'auto' : 'none';
-            text.style.cursor = this.currentMode === 'edit' ? 'move' : (this.currentMode === 'curve' ? 'pointer' : 'default');
-            
-            // Show only spaces to next curve if available
+            // Show only segments with spaces to next curve
             if (segment.spacesToNextCurve !== null && segment.spacesToNextCurve !== undefined) {
-                text.textContent = `${segment.spacesToNextCurve}`;
-            } else {
-                // If no curve found or no spaces calculated, show nothing or a dash
-                text.textContent = '';
+                // For numbers 3, 2, 1, 0 - use distance sign image
+                if (segment.spacesToNextCurve >= 0 && segment.spacesToNextCurve <= 3) {
+                    this.createDistanceSign(segment, numberInfo, group);
+                } else {
+                    // For numbers 4 and above - use regular text
+                    this.createRegularNumber(segment, numberInfo, group);
+                }
             }
-            
-            group.appendChild(text);
             
             // Add speed limit text for curves
             if (segment.is_curve && segment.speed_limit) {
@@ -1393,6 +1375,71 @@ class HeatTrackGenerator {
         speedText.textContent = segment.speed_limit;
         group.appendChild(speedText);
         return speedText;
+    }
+
+    createDistanceSign(segment, numberInfo, group) {
+        // Calculate rotation angle from direction vector
+        const angle = Math.atan2(numberInfo.direction[1], numberInfo.direction[0]) * 180 / Math.PI;
+        
+        // Create a group for the distance sign (image + text)
+        const signGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        signGroup.setAttribute('class', `distance-sign ${this.currentMode === 'edit' ? 'draggable' : ''}`);
+        signGroup.setAttribute('data-segment-id', segment.segment_number);
+        signGroup.setAttribute('transform', `translate(${numberInfo.position[0]}, ${numberInfo.position[1]}) rotate(${angle})`);
+        signGroup.style.pointerEvents = (this.currentMode === 'edit' || this.currentMode === 'curve') ? 'auto' : 'none';
+        signGroup.style.cursor = this.currentMode === 'edit' ? 'move' : (this.currentMode === 'curve' ? 'pointer' : 'default');
+        
+        // Calculate size based on visual settings
+        const signSize = this.visualSettings.distanceSignSize;
+        
+        // Create the distance sign image
+        const signImage = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+        signImage.setAttribute('href', 'distance_sign.png');
+        signImage.setAttribute('x', -signSize / 2);
+        signImage.setAttribute('y', -signSize / 2);
+        signImage.setAttribute('width', signSize);
+        signImage.setAttribute('height', signSize);
+        signImage.setAttribute('class', 'distance-sign-image');
+        signGroup.appendChild(signImage);
+        
+        // Create the number text on top of the image
+        const numberText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        numberText.setAttribute('x', 0);
+        numberText.setAttribute('y', 0);
+        numberText.setAttribute('text-anchor', 'middle');
+        numberText.setAttribute('dominant-baseline', 'middle');
+        numberText.setAttribute('fill', '#000000'); // Black text for visibility on the sign
+        numberText.setAttribute('font-size', this.visualSettings.segmentNumberSize * 0.8); // Slightly smaller than the sign
+        numberText.setAttribute('font-weight', 'bold');
+        numberText.setAttribute('class', 'distance-sign-number');
+        numberText.textContent = segment.spacesToNextCurve.toString();
+        signGroup.appendChild(numberText);
+        
+        group.appendChild(signGroup);
+        return signGroup;
+    }
+
+    createRegularNumber(segment, numberInfo, group) {
+        // Calculate rotation angle from direction vector
+        const angle = Math.atan2(numberInfo.direction[1], numberInfo.direction[0]) * 180 / Math.PI;
+        
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', numberInfo.position[0]);
+        text.setAttribute('y', numberInfo.position[1]);
+        text.setAttribute('transform', `rotate(${angle} ${numberInfo.position[0]} ${numberInfo.position[1]})`);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('fill', this.visualSettings.segmentNumberColor);
+        text.setAttribute('font-size', this.visualSettings.segmentNumberSize);
+        text.setAttribute('font-weight', 'bold');
+        text.setAttribute('class', `segment-number ${this.currentMode === 'edit' ? 'draggable' : ''}`);
+        text.setAttribute('data-segment-id', segment.segment_number);
+        text.style.pointerEvents = (this.currentMode === 'edit' || this.currentMode === 'curve') ? 'auto' : 'none';
+        text.style.cursor = this.currentMode === 'edit' ? 'move' : (this.currentMode === 'curve' ? 'pointer' : 'default');
+        text.textContent = segment.spacesToNextCurve.toString();
+        
+        group.appendChild(text);
+        return text;
     }
 
     getSegmentStrokeWidth(isCurve) {
@@ -1511,6 +1558,20 @@ class HeatTrackGenerator {
             }
         });
         
+        // Update distance sign pointer events for edit and curve modes
+        const distanceSigns = svg.querySelectorAll('.distance-sign');
+        distanceSigns.forEach(sign => {
+            sign.style.pointerEvents = (mode === 'edit' || mode === 'curve') ? 'auto' : 'none';
+            sign.style.cursor = mode === 'edit' ? 'move' : (mode === 'curve' ? 'pointer' : 'default');
+            
+            // Update CSS classes
+            if (mode === 'edit') {
+                sign.classList.add('draggable');
+            } else {
+                sign.classList.remove('draggable');
+            }
+        });
+        
         // Update speed limit text pointer events for curve mode
         const speedLimitTexts = svg.querySelectorAll('.speed-limit-text');
         speedLimitTexts.forEach(text => {
@@ -1537,8 +1598,8 @@ class HeatTrackGenerator {
             if (element.classList.contains('segment-line')) {
                 this.handleCurveSelection(element);
                 handledByMode = true;
-            } else if (element.classList.contains('segment-number')) {
-                // In curve mode, clicking on numbers toggles their side
+            } else if (element.classList.contains('segment-number') || element.classList.contains('distance-sign') || element.classList.contains('distance-sign-number') || element.classList.contains('distance-sign-image')) {
+                // In curve mode, clicking on numbers or distance signs toggles their side
                 this.handleNumberSideToggle(element);
                 handledByMode = true;
             } else if (element.classList.contains('speed-limit-text')) {
@@ -1557,7 +1618,9 @@ class HeatTrackGenerator {
                 handledByMode = true;
             }
         } else if (this.currentMode === 'edit') {
-            if (element.classList.contains('segment-line') || element.classList.contains('segment-number')) {
+            if (element.classList.contains('segment-line') || element.classList.contains('segment-number') || 
+                element.classList.contains('distance-sign') || element.classList.contains('distance-sign-number') || 
+                element.classList.contains('distance-sign-image')) {
                 this.startSegmentDrag(element, x, y);
                 handledByMode = true;
             }
@@ -1568,6 +1631,9 @@ class HeatTrackGenerator {
             // Check if we clicked on an interactive element (but not the background)
             const isInteractiveElement = element.classList.contains('segment-line') || 
                                        element.classList.contains('segment-number') || 
+                                       element.classList.contains('distance-sign') ||
+                                       element.classList.contains('distance-sign-number') ||
+                                       element.classList.contains('distance-sign-image') ||
                                        element.classList.contains('kerb-hit-area') ||
                                        element.classList.contains('segment-fill');
             
@@ -1740,7 +1806,17 @@ class HeatTrackGenerator {
     }
 
     handleNumberSideToggle(element) {
-        const segmentId = parseInt(element.getAttribute('data-segment-id'));
+        // Get segment ID from the element or its parent (for distance sign children)
+        let segmentId;
+        if (element.getAttribute('data-segment-id')) {
+            segmentId = parseInt(element.getAttribute('data-segment-id'));
+        } else if (element.parentElement && element.parentElement.getAttribute('data-segment-id')) {
+            // Handle clicking on children of distance sign group (image or text)
+            segmentId = parseInt(element.parentElement.getAttribute('data-segment-id'));
+        } else {
+            return;
+        }
+        
         const segment = this.trackData.segments.find(s => s.segment_number === segmentId);
         if (!segment) return;
         
@@ -1883,11 +1959,15 @@ class HeatTrackGenerator {
         this.dragStartY = y;
         
         // Get segment ID from element or its parent
-        let segmentId = element.getAttribute('data-segment-id');
-        if (!segmentId && element.classList.contains('segment-number')) {
-            // If clicked on segment number, find the corresponding segment line
-            const segmentNumber = element.textContent;
-            segmentId = segmentNumber;
+        let segmentId;
+        if (element.getAttribute('data-segment-id')) {
+            segmentId = element.getAttribute('data-segment-id');
+        } else if (element.parentElement && element.parentElement.getAttribute('data-segment-id')) {
+            // Handle clicking on children of distance sign group (image or text)
+            segmentId = element.parentElement.getAttribute('data-segment-id');
+        } else if (element.classList.contains('segment-number')) {
+            // If clicked on segment number, use the segment ID
+            segmentId = element.getAttribute('data-segment-id');
         }
         
         this.draggedSegmentId = parseInt(segmentId);
