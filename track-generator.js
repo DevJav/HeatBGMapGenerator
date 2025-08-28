@@ -2534,7 +2534,38 @@ class HeatTrackGenerator {
     }
 
     exportSVG(svg) {
-        const svgData = new XMLSerializer().serializeToString(svg);
+        // Create a clean copy of the SVG without background styling
+        const svgClone = svg.cloneNode(true);
+        
+        // Remove background styles that would add background color
+        svgClone.style.background = 'none';
+        svgClone.style.backgroundColor = 'transparent';
+        
+        // Ensure the SVG itself doesn't have a background fill
+        svgClone.removeAttribute('style');
+        
+        // Remove the grid pattern and background rect
+        const defs = svgClone.querySelector('defs');
+        if (defs) {
+            defs.remove();
+        }
+        
+        // Remove the background rect that uses the grid pattern
+        const backgroundRect = svgClone.querySelector('rect[fill*="grid"]');
+        if (backgroundRect) {
+            backgroundRect.remove();
+        }
+        
+        // Remove any other background rects that might have solid fills
+        const allRects = svgClone.querySelectorAll('rect');
+        allRects.forEach(rect => {
+            const fill = rect.getAttribute('fill');
+            if (fill && (fill.includes('url(#grid)') || fill === '#1a1a1a' || fill === '#555')) {
+                rect.remove();
+            }
+        });
+        
+        const svgData = new XMLSerializer().serializeToString(svgClone);
         const blob = new Blob([svgData], { type: 'image/svg+xml' });
         const url = URL.createObjectURL(blob);
         
@@ -2554,12 +2585,41 @@ class HeatTrackGenerator {
         canvas.width = 2000;
         canvas.height = 1600;
         
-        const svgData = new XMLSerializer().serializeToString(svg);
+        // Create a clean copy of the SVG without background styling
+        const svgClone = svg.cloneNode(true);
+        svgClone.style.background = 'none';
+        svgClone.style.backgroundColor = 'transparent';
+        svgClone.removeAttribute('style');
+        
+        // Remove the grid pattern and background rect
+        const defs = svgClone.querySelector('defs');
+        if (defs) {
+            defs.remove();
+        }
+        
+        // Remove the background rect that uses the grid pattern
+        const backgroundRect = svgClone.querySelector('rect[fill*="grid"]');
+        if (backgroundRect) {
+            backgroundRect.remove();
+        }
+        
+        // Remove any other background rects that might have solid fills
+        const allRects = svgClone.querySelectorAll('rect');
+        allRects.forEach(rect => {
+            const fill = rect.getAttribute('fill');
+            if (fill && (fill.includes('url(#grid)') || fill === '#1a1a1a' || fill === '#555')) {
+                rect.remove();
+            }
+        });
+        
+        const svgData = new XMLSerializer().serializeToString(svgClone);
         const img = new Image();
         
         img.onload = () => {
-            ctx.fillStyle = '#555';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // Don't fill background - leave it transparent
+            // ctx.fillStyle = '#555';
+            // ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             
             canvas.toBlob(blob => {
