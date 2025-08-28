@@ -12,7 +12,7 @@ class HeatTrackGenerator {
         this.panY = 0;
         
         // SVG ViewBox dimensions
-        this.viewBoxWidth = 1000;
+        this.viewBoxWidth = 1400;
         this.viewBoxHeight = 800;
         
         // Default visual settings

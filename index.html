@@ -12,140 +12,377 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
             min-height: 100vh;
-            color: #333;
+            color: #f0f0f0;
+            overflow: hidden;
         }
 
         .container {
-            display: flex;
+            display: grid;
+            grid-template-areas: 
+                "header header"
+                "sidebar main";
+            grid-template-rows: auto 1fr;
+            grid-template-columns: 320px 1fr;
             height: 100vh;
+            transition: grid-template-columns 0.3s ease;
+        }
+
+        .container.sidebar-collapsed {
+            grid-template-columns: 60px 1fr;
+        }
+
+        .top-header {
+            grid-area: header;
+            background: rgba(30, 30, 30, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid #3a3a3a;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #ff6b47;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .sidebar-toggle {
+            background: none;
+            border: none;
+            color: #9ca3af;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .sidebar-toggle:hover {
+            background: #2a2a2a;
+            color: #e5e5e5;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            position: relative;
+        }
+
+        .export-dropdown {
+            position: relative;
+        }
+
+        .export-menu {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            background: rgba(30, 30, 30, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid #4a4a4a;
+            border-radius: 8px;
+            min-width: 160px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 200;
+            display: none;
+        }
+
+        .export-menu.show {
+            display: block;
+        }
+
+        .export-menu-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 16px;
+            color: #f0f0f0;
+            text-decoration: none;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s ease;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+        }
+
+        .export-menu-item:hover {
+            background: rgba(60, 60, 60, 0.5);
+        }
+
+        .export-menu-item:first-child {
+            border-radius: 8px 8px 0 0;
+        }
+
+        .export-menu-item:last-child {
+            border-radius: 0 0 8px 8px;
+        }
+
+        .export-menu-item:first-child:last-child {
+            border-radius: 8px;
+        }
+
+        .quick-action {
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            color: #e5e5e5;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .quick-action:hover {
+            background: #2a2a2a;
+            border-color: #3a3a3a;
+        }
+
+        .quick-action.primary {
+            background: #ff6b47;
+            border-color: #ff6b47;
+            color: white;
+        }
+
+        .quick-action.primary:hover {
+            background: #e55a3a;
         }
 
         .sidebar {
-            width: 350px;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            padding: 20px;
+            grid-area: sidebar;
+            background: rgba(30, 30, 30, 0.95);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid #3a3a3a;
             overflow-y: auto;
-            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+            overflow-x: hidden;
             display: flex;
             flex-direction: column;
+            transition: all 0.3s ease;
         }
 
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
+        .sidebar.collapsed {
+            width: 60px;
         }
 
-        .header h1 {
-            color: #764ba2;
-            font-size: 24px;
-            margin-bottom: 5px;
+        .sidebar.collapsed .section-content {
+            display: none;
         }
 
-        .header p {
-            color: #666;
-            font-size: 14px;
+        .sidebar.collapsed .section-header h2 {
+            display: none;
         }
 
         .section {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-            border: 1px solid rgba(118, 75, 162, 0.1);
+            margin-bottom: 2px;
+            border-bottom: 1px solid #3a3a3a;
         }
 
-        .section h2 {
-            color: #764ba2;
-            font-size: 18px;
-            margin-bottom: 15px;
+        .section-header {
+            padding: 16px 20px;
+            cursor: pointer;
             display: flex;
             align-items: center;
+            justify-content: space-between;
+            transition: background 0.2s ease;
+            user-select: none;
+        }
+
+        .section-header:hover {
+            background: rgba(60, 60, 60, 0.5);
+        }
+
+        .section-header h2 {
+            color: #e5e5e5;
+            font-size: 15px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-icon {
+            color: #ff6b47;
+            font-size: 16px;
+        }
+
+        .section-toggle {
+            color: #9ca3af;
+            transition: transform 0.2s ease;
+        }
+
+        .section.collapsed .section-toggle {
+            transform: rotate(-90deg);
+        }
+
+        .section-content {
+            padding: 0 20px 20px 20px;
+            transition: all 0.3s ease;
+        }
+
+        .section.collapsed .section-content {
+            display: none;
         }
 
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: 16px;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 5px;
+            margin-bottom: 6px;
             font-weight: 500;
-            color: #555;
+            color: #9ca3af;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .form-group input,
         .form-group select {
             width: 100%;
-            padding: 10px;
-            border: 2px solid #e1e5e9;
+            padding: 10px 12px;
+            background: #2a2a2a;
+            border: 1px solid #4a4a4a;
             border-radius: 8px;
+            color: #f0f0f0;
             font-size: 14px;
-            transition: border-color 0.3s ease;
+            transition: all 0.2s ease;
         }
 
         .form-group input:focus,
         .form-group select:focus {
             outline: none;
-            border-color: #764ba2;
-            box-shadow: 0 0 0 3px rgba(118, 75, 162, 0.1);
+            border-color: #ff6b47;
+            box-shadow: 0 0 0 3px rgba(255, 107, 71, 0.1);
+        }
+
+        .form-group input[type="color"] {
+            height: 40px;
+            cursor: pointer;
         }
 
         .btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 12px 20px;
-            border: none;
+            background: #3a3a3a;
+            color: #f0f0f0;
+            border: 1px solid #4a4a4a;
+            padding: 10px 16px;
             border-radius: 8px;
             cursor: pointer;
             font-size: 14px;
-            font-weight: 600;
-            transition: all 0.3s ease;
+            font-weight: 500;
+            transition: all 0.2s ease;
             width: 100%;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
         }
 
         .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(118, 75, 162, 0.4);
+            background: #4a4a4a;
+            border-color: #5a5a5a;
         }
 
         .btn:disabled {
-            background: #ccc;
+            background: #2a2a2a;
+            color: #7a7a7a;
             cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
+            border-color: #3a3a3a;
         }
 
-        .btn-secondary {
-            background: linear-gradient(135deg, #ffeaa7 0%, #fab1a0 100%);
-            color: #333;
+        .btn.primary {
+            background: #ff6b47;
+            border-color: #ff6b47;
+            color: white;
         }
 
-        .btn-secondary:hover {
-            box-shadow: 0 5px 15px rgba(255, 193, 7, 0.4);
+        .btn.primary:hover {
+            background: #e55a3a;
+        }
+
+        .btn.secondary {
+            background: #4f46e5;
+            border-color: #4f46e5;
+            color: white;
+        }
+
+        .btn.secondary:hover {
+            background: #4338ca;
+        }
+
+        .btn.success {
+            background: #10b981;
+            border-color: #10b981;
+            color: white;
+        }
+
+        .btn.success:hover {
+            background: #059669;
+        }
+
+        .btn.warning {
+            background: #f59e0b;
+            border-color: #f59e0b;
+            color: white;
+        }
+
+        .btn.warning:hover {
+            background: #d97706;
+        }
+
+        .btn.danger {
+            background: #ef4444;
+            border-color: #ef4444;
+            color: white;
+        }
+
+        .btn.danger:hover {
+            background: #dc2626;
+        }
+
+        .btn.active {
+            background: #ff6b47;
+            border-color: #ff6b47;
+            color: white;
         }
 
         .toolbar {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 16px;
         }
 
         .toolbar .btn {
-            flex: 1;
-            min-width: 100px;
+            margin-bottom: 0;
+            font-size: 13px;
+            padding: 8px 12px;
         }
 
         .main-content {
-            flex: 1;
+            grid-area: main;
             position: relative;
-            background: #555;
+            background: #222;
+            overflow: hidden;
         }
 
         .canvas-container {
@@ -154,38 +391,69 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            overflow: hidden;
+            position: relative;
+            padding: 20px;
         }
 
         #trackCanvas {
-            max-width: 100%;
-            max-height: 100%;
-            border: 2px solid #333;
-            background: #555;
+            width: calc(100% - 40px);
+            height: calc(100% - 40px);
+            min-width: 800px;
+            min-height: 600px;
+            border: 1px solid #4a4a4a;
+            background: #1a1a1a;
+            border-radius: 8px;
+        }
+
+        .canvas-overlay {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .canvas-control {
+            background: rgba(30, 30, 30, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid #4a4a4a;
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: #b0b0b0;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
 
         .status {
             position: fixed;
-            bottom: 20px;
-            right: 20px;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
             padding: 12px 20px;
             border-radius: 8px;
             color: white;
             font-weight: 500;
             z-index: 1000;
             display: none;
+            backdrop-filter: blur(10px);
         }
 
         .status.success {
-            background: #27ae60;
+            background: rgba(16, 185, 129, 0.9);
+            border: 1px solid #10b981;
         }
 
         .status.error {
-            background: #e74c3c;
+            background: rgba(239, 68, 68, 0.9);
+            border: 1px solid #ef4444;
         }
 
         .status.info {
-            background: #3498db;
+            background: rgba(59, 130, 246, 0.9);
+            border: 1px solid #3b82f6;
         }
 
         .loading {
@@ -193,10 +461,11 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(30, 30, 30, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid #4a4a4a;
             padding: 30px;
             border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
             text-align: center;
             z-index: 1000;
             display: none;
@@ -205,8 +474,8 @@
         .spinner {
             width: 40px;
             height: 40px;
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #764ba2;
+            border: 3px solid #4a4a4a;
+            border-top: 3px solid #ff6b47;
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin: 0 auto 15px;
@@ -218,103 +487,142 @@
         }
 
         .file-upload {
-            border: 2px dashed #764ba2;
+            border: 2px dashed #5a5a5a;
             border-radius: 12px;
-            padding: 30px;
+            padding: 30px 20px;
             text-align: center;
             cursor: pointer;
             transition: all 0.3s ease;
-            background: rgba(118, 75, 162, 0.05);
+            background: rgba(40, 40, 40, 0.5);
+            position: relative;
         }
 
         .file-upload:hover {
-            border-color: #667eea;
-            background: rgba(118, 75, 162, 0.1);
+            border-color: #ff6b47;
+            background: rgba(255, 107, 71, 0.05);
         }
 
         .file-upload.dragover {
-            border-color: #667eea;
-            background: rgba(118, 75, 162, 0.15);
+            border-color: #ff6b47;
+            background: rgba(255, 107, 71, 0.1);
             transform: scale(1.02);
         }
 
+        .file-upload-icon {
+            font-size: 24px;
+            color: #6b7280;
+            margin-bottom: 8px;
+        }
+
+        .file-upload-text {
+            color: #9ca3af;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+
+        .file-upload-subtext {
+            color: #6b7280;
+            font-size: 12px;
+        }
+
         .curve-controls {
-            display: none;
-            margin-top: 15px;
-            padding: 15px;
-            background: #f8f9fa;
+            margin-top: 16px;
+            padding: 16px;
+            background: rgba(40, 40, 40, 0.5);
             border-radius: 8px;
-            border-left: 4px solid #764ba2;
+            border-left: 3px solid #ff6b47;
         }
 
-        .curve-mode {
-            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
-        }
-
-        .curve-mode:hover {
-            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
-        }
-
-        .white-line-mode {
-            background: linear-gradient(135deg, #ddd 0%, #bbb 100%);
-            color: #333;
-        }
-
-        .white-line-mode:hover {
-            box-shadow: 0 5px 15px rgba(187, 187, 187, 0.4);
+        .curve-controls p {
+            font-size: 12px;
+            color: #9ca3af;
+            line-height: 1.5;
         }
 
         .settings-group {
             margin-bottom: 20px;
-            padding: 15px;
-            background: #f8f9fa;
+            padding: 16px;
+            background: rgba(40, 40, 40, 0.5);
             border-radius: 8px;
-            border-left: 4px solid #764ba2;
+            border: 1px solid #4a4a4a;
         }
 
         .settings-group h3 {
-            margin: 0 0 15px 0;
-            color: #333;
+            margin: 0 0 12px 0;
+            color: #e5e5e5;
             font-size: 14px;
-            font-weight: bold;
-        }
-
-        .settings-group label {
-            display: block;
-            margin: 8px 0 5px 0;
-            font-size: 12px;
-            color: #555;
-            font-weight: 500;
-        }
-
-        .settings-group input[type="number"] {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
-            margin-bottom: 10px;
-        }
-
-        .settings-group input[type="number"]:focus {
-            outline: none;
-            border-color: #764ba2;
-            box-shadow: 0 0 0 2px rgba(118, 75, 162, 0.2);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .settings-buttons {
-            display: flex;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
             gap: 8px;
-            flex-wrap: wrap;
         }
 
         .settings-buttons .btn {
-            flex: 1;
-            min-width: 80px;
             font-size: 12px;
             padding: 8px 12px;
         }
 
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .container {
+                grid-template-areas: 
+                    "header"
+                    "main";
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 1fr;
+            }
+
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: -320px;
+                height: 100vh;
+                z-index: 200;
+                transition: left 0.3s ease;
+            }
+
+            .sidebar.mobile-open {
+                left: 0;
+            }
+
+            .mobile-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 150;
+                display: none;
+            }
+
+            .mobile-overlay.active {
+                display: block;
+            }
+        }
+
+        /* Scrollbar styling */
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background: #3a3a3a;
+            border-radius: 3px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background: #4a4a4a;
+        }
         /* Edit mode styles */
         .segment-number.draggable {
             cursor: move !important;
@@ -329,236 +637,447 @@
             pointer-events: none;
         }
     </style>
+
+    </style>
 </head>
 <body>
-    <div class="container">
-        <div class="sidebar">
-            <div class="header">
-                <h1>🏁 Heat Track Generator</h1>
-                <p>Create custom racetracks for Heat: Pedal to the Metal</p>
+    <div class="container" id="container">
+        <div class="top-header">
+            <div class="header-left">
+                <button class="sidebar-toggle" id="sidebarToggle">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
+                    </svg>
+                </button>
+                <div class="logo">
+                    <span>🏁</span>
+                    Heat Track Generator
+                </div>
             </div>
-
-            <div class="section">
-                <h2>📂 SVG File</h2>
-                <div class="file-upload" id="fileUpload">
-                    <p>📎 Click or drag SVG file here</p>
-                    <input type="file" id="fileInput" accept=".svg" style="display: none;">
-                </div>
-                <div id="fileName" style="margin-top: 10px; font-size: 12px; color: #666;"></div>
-            </div>
-
-            <div class="section">
-                <h2>⚙️ Track Settings</h2>
-                <div class="form-group">
-                    <label for="trackWidth">Track Width</label>
-                    <input type="number" id="trackWidth" value="200" min="10" max="500" step="10">
-                </div>
-                <div class="form-group">
-                    <label for="segmentLength">Segment Length</label>
-                    <input type="number" id="segmentLength" value="300" min="10" max="1000" step="25">
-                </div>
-                <button class="btn" id="generateBtn">🎯 Generate Track</button>
-            </div>
-
-            <div class="section">
-                <h2>🏎️ Track Tools</h2>
-                <div class="toolbar">
-                    <button class="btn btn-secondary" id="panMode">✋ Pan</button>
-                    <button class="btn btn-secondary" id="editMode">✏️ Edit</button>
-                    <button class="btn curve-mode" id="curveMode">🌀 Curves</button>
-                    <button class="btn btn-secondary" id="kerbMode">🏁 Kerbs</button>
-                    <button class="btn white-line-mode" id="whiteLineMode">⚪ White Lines</button>
-                </div>
-                
-                <div class="curve-controls" id="curveControls">
-                    <p style="font-size: 12px; color: #666; margin-top: 10px;">
-                        Click a segment line to toggle curve marking<br>
-                        You'll be prompted to select a speed limit when creating curves<br>
-                        Click on numbers to move all numbers for that curve left/right
-                    </p>
-                </div>
-                
-                <div class="curve-controls" id="kerbControls" style="display: none;">
-                    <div class="form-group">
-                        <label>Racing Kerbs</label>
-                        <p style="font-size: 12px; color: #666; margin: 5px 0;">
-                            Add red & white striped kerbs to track borders
-                        </p>
-                    </div>
-                    <p style="font-size: 12px; color: #666; margin-top: 10px;">
-                        Click on track borders to add/remove kerbs on that side
-                    </p>
-                </div>
-                
-                <div class="curve-controls" id="whiteLineControls" style="display: none;">
-                    <div class="form-group">
-                        <label>White Lines</label>
-                        <p style="font-size: 12px; color: #666; margin: 5px 0;">
-                            Add white lines to track borders (grouped by target curve)
-                        </p>
-                    </div>
-                    <p style="font-size: 12px; color: #666; margin-top: 10px;">
-                        Click on track borders to add/remove/switch white lines<br>
-                        All segments pointing to the same curve will be affected
-                    </p>
-                </div>
-                
-                <div class="curve-controls" id="editControls" style="display: none;">
-                    <div class="form-group">
-                        <label>Edit Segments</label>
-                        <p style="font-size: 12px; color: #666; margin: 5px 0;">
-                            Drag and drop segments to reposition them along the track
-                        </p>
-                    </div>
-                    <div class="form-group" style="margin-top: 15px;">
-                        <button class="btn btn-secondary" id="clearDebugBtn" style="width: 100%; font-size: 11px;">
-                            🐛 Clear Debug Points
+            <div class="header-actions">
+                <div class="export-dropdown">
+                    <button class="quick-action" id="exportDropdownBtn">
+                        <span>📤</span>
+                        Export
+                        <span>▼</span>
+                    </button>
+                    <div class="export-menu" id="exportMenu">
+                        <button class="export-menu-item" id="exportPNGFromMenu">
+                            <span>📷</span>
+                            Export PNG
+                        </button>
+                        <button class="export-menu-item" id="exportSVGFromMenu">
+                            <span>🖼️</span>
+                            Export SVG
                         </button>
                     </div>
-                    <p style="font-size: 12px; color: #666; margin-top: 10px;">
-                        Click and drag segment numbers or lines to move them
+                </div>
+                <button class="quick-action primary" id="quickGenerate">
+                    <span>🎯</span>
+                    Generate Track
+                </button>
+            </div>
+        </div>
+
+        <div class="sidebar" id="sidebar">
+            <div class="section">
+                <div class="section-header" data-section="file">
+                    <h2>
+                        <span class="section-icon">📂</span>
+                        SVG File
+                    </h2>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div class="file-upload" id="fileUpload">
+                        <div class="file-upload-icon">📎</div>
+                        <div class="file-upload-text">Click or drag SVG file here</div>
+                        <div class="file-upload-subtext">Supports .svg files only</div>
+                        <input type="file" id="fileInput" accept=".svg" style="display: none;">
+                    </div>
+                    <div id="fileName" style="margin-top: 12px; font-size: 12px; color: #9ca3af;"></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-header" data-section="settings">
+                    <h2>
+                        <span class="section-icon">⚙️</span>
+                        Track Settings
+                    </h2>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div class="form-group">
+                        <label for="trackWidth">Track Width</label>
+                        <input type="number" id="trackWidth" value="200" min="10" max="500" step="10">
+                    </div>
+                    <div class="form-group">
+                        <label for="segmentLength">Segment Length</label>
+                        <input type="number" id="segmentLength" value="300" min="10" max="1000" step="25">
+                    </div>
+                    <button class="btn primary" id="generateBtn">
+                        <span>🎯</span>
+                        Generate Track
+                    </button>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-header" data-section="tools">
+                    <h2>
+                        <span class="section-icon">🛠️</span>
+                        Track Tools
+                    </h2>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div class="toolbar">
+                        <button class="btn" id="panMode">
+                            <span>✋</span>
+                            Pan
+                        </button>
+                        <button class="btn" id="editMode">
+                            <span>✏️</span>
+                            Edit
+                        </button>
+                        <button class="btn" id="curveMode">
+                            <span>🌀</span>
+                            Curves
+                        </button>
+                        <button class="btn" id="kerbMode">
+                            <span>🏁</span>
+                            Kerbs
+                        </button>
+                        <button class="btn" id="whiteLineMode">
+                            <span>⚪</span>
+                            Lines
+                        </button>
+                    </div>
+                    
+                    <div class="curve-controls" id="curveControls" style="display: none;">
+                        <p>Click a segment line to toggle curve marking. You'll be prompted to select a speed limit when creating curves. Click on numbers to move all numbers for that curve left/right.</p>
+                    </div>
+                    
+                    <div class="curve-controls" id="kerbControls" style="display: none;">
+                        <p><strong>Racing Kerbs</strong><br>
+                        Add red & white striped kerbs to track borders. Click on track borders to add/remove kerbs on that side.</p>
+                    </div>
+                    
+                    <div class="curve-controls" id="whiteLineControls" style="display: none;">
+                        <p><strong>White Lines</strong><br>
+                        Add white lines to track borders (grouped by target curve). Click on track borders to add/remove/switch white lines.</p>
+                    </div>
+                    
+                    <div class="curve-controls" id="editControls" style="display: none;">
+                        <p><strong>Edit Segments</strong><br>
+                        Drag and drop segments to reposition them along the track. Click and drag segment numbers or lines to move them.</p>
+                        <button class="btn secondary" id="clearDebugBtn" style="margin-top: 12px;">
+                            <span>🐛</span>
+                            Clear Debug Points
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="section collapsed">
+                <div class="section-header" data-section="visual">
+                    <h2>
+                        <span class="section-icon">🎨</span>
+                        Visual Settings
+                    </h2>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <div class="settings-group">
+                        <h3>Text Settings</h3>
+                        <div class="form-group">
+                            <label for="segmentNumberSize">Segment Number Size</label>
+                            <input type="number" id="segmentNumberSize" min="8" max="280" value="38">
+                        </div>
+                        <div class="form-group">
+                            <label for="segmentNumberOffset">Segment Number Offset</label>
+                            <input type="number" id="segmentNumberOffset" min="0" max="300" value="140">
+                        </div>
+                        <div class="form-group">
+                            <label for="speedLimitSize">Speed Limit Size</label>
+                            <input type="number" id="speedLimitSize" min="20" max="100" value="64">
+                        </div>
+                        <div class="form-group">
+                            <label for="speedLimitOffset">Speed Limit Offset</label>
+                            <input type="number" id="speedLimitOffset" min="0" max="300" value="100">
+                        </div>
+                    </div>
+                    
+                    <div class="settings-group">
+                        <h3>Line Settings</h3>
+                        <div class="form-group">
+                            <label for="normalSegmentWidth">Normal Segment Width</label>
+                            <input type="number" id="normalSegmentWidth" min="1" max="20" value="8">
+                        </div>
+                        <div class="form-group">
+                            <label for="curveSegmentWidth">Curve Segment Width</label>
+                            <input type="number" id="curveSegmentWidth" min="5" max="50" value="25">
+                        </div>
+                        <div class="form-group">
+                            <label for="borderWidth">Border Width</label>
+                            <input type="number" id="borderWidth" min="1" max="15" value="5">
+                        </div>
+                        <div class="form-group">
+                            <label for="borderOffset">Border Offset (Multiplier)</label>
+                            <input type="number" id="borderOffset" min="0.1" max="5" step="0.1" value="0.9">
+                        </div>
+                        <div class="form-group">
+                            <label for="centerlineWidth">Centerline Width</label>
+                            <input type="number" id="centerlineWidth" min="3" max="20" value="10">
+                        </div>
+                    </div>
+                    
+                    <div class="settings-group">
+                        <h3>Centerline Dash</h3>
+                        <div class="form-group">
+                            <label for="dashLength">Dash Length</label>
+                            <input type="number" id="dashLength" min="10" max="50" value="25">
+                        </div>
+                        <div class="form-group">
+                            <label for="gapLength">Gap Length</label>
+                            <input type="number" id="gapLength" min="10" max="50" value="25">
+                        </div>
+                    </div>
+                    
+                    <div class="settings-group">
+                        <h3>Racing Kerbs</h3>
+                        <div class="form-group">
+                            <label for="kerbWidth">Kerb Width</label>
+                            <input type="number" id="kerbWidth" min="2" max="35" value="15">
+                        </div>
+                        <div class="form-group">
+                            <label for="kerbDashLength">Kerb Dash Length</label>
+                            <input type="number" id="kerbDashLength" min="5" max="30" value="20">
+                        </div>
+                        <div class="form-group">
+                            <label for="kerbGapLength">Kerb Gap Length</label>
+                            <input type="number" id="kerbGapLength" min="5" max="30" value="20">
+                        </div>
+                    </div>
+                    
+                    <div class="settings-group">
+                        <h3>White Lines</h3>
+                        <div class="form-group">
+                            <label for="whiteLineWidth">White Line Width</label>
+                            <input type="number" id="whiteLineWidth" min="2" max="50" value="20">
+                        </div>
+                    </div>
+                    
+                    <div class="settings-group">
+                        <h3>Colors</h3>
+                        <div class="form-group">
+                            <label for="trackFillColor">Track Fill</label>
+                            <input type="color" id="trackFillColor" value="#000000">
+                        </div>
+                        <div class="form-group">
+                            <label for="trackBorderColor">Track Border</label>
+                            <input type="color" id="trackBorderColor" value="#ffffff">
+                        </div>
+                        <div class="form-group">
+                            <label for="centerlineColor">Centerline</label>
+                            <input type="color" id="centerlineColor" value="#ffffff">
+                        </div>
+                        <div class="form-group">
+                            <label for="whiteLineColor">White Lines</label>
+                            <input type="color" id="whiteLineColor" value="#ffffff">
+                        </div>
+                        <div class="form-group">
+                            <label for="segmentNumberColor">Segment Numbers</label>
+                            <input type="color" id="segmentNumberColor" value="#ffffff">
+                        </div>
+                        <div class="form-group">
+                            <label for="speedLimitColor">Speed Limits</label>
+                            <input type="color" id="speedLimitColor" value="#ffff00">
+                        </div>
+                        <div class="form-group">
+                            <label for="kerbWhiteColor">Kerb White</label>
+                            <input type="color" id="kerbWhiteColor" value="#ffffff">
+                        </div>
+                        <div class="form-group">
+                            <label for="kerbRedColor">Kerb Red</label>
+                            <input type="color" id="kerbRedColor" value="#9f1717">
+                        </div>
+                        <div class="form-group">
+                            <label for="debugTextColor">Debug Text</label>
+                            <input type="color" id="debugTextColor" value="#ff0000">
+                        </div>
+                    </div>
+                    
+                    <div class="settings-buttons">
+                        <button class="btn secondary" id="saveSettings">
+                            <span>💾</span>
+                            Save
+                        </button>
+                        <button class="btn secondary" id="loadSettings">
+                            <span>📂</span>
+                            Load
+                        </button>
+                        <button class="btn warning" id="resetSettings">
+                            <span>🔄</span>
+                            Reset
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-header" data-section="export">
+                    <h2>
+                        <span class="section-icon">💾</span>
+                        Export
+                    </h2>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <button class="btn success" id="exportPNG">
+                        <span>📷</span>
+                        Export PNG
+                    </button>
+                    <button class="btn success" id="exportSVG">
+                        <span>🖼️</span>
+                        Export SVG
+                    </button>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-header" data-section="session">
+                    <h2>
+                        <span class="section-icon">🗑️</span>
+                        Session
+                    </h2>
+                    <span class="section-toggle">▼</span>
+                </div>
+                <div class="section-content">
+                    <button class="btn danger" id="clearSession">
+                        <span>🗑️</span>
+                        Clear Session
+                    </button>
+                    <p style="font-size: 12px; color: #9ca3af; margin-top: 8px;">
+                        Clears saved map and view data
                     </p>
                 </div>
-            </div>
-
-            <div class="section">
-                <h2>🎨 Visual Settings</h2>
-                <div class="settings-group">
-                    <h3>Text Settings</h3>
-                    <label for="segmentNumberSize">Segment Number Size:</label>
-                    <input type="number" id="segmentNumberSize" min="8" max="280" value="38">
-                    
-                    <label for="segmentNumberOffset">Segment Number Offset:</label>
-                    <input type="number" id="segmentNumberOffset" min="0" max="300" value="140">
-                    
-                    <label for="speedLimitSize">Speed Limit Size:</label>
-                    <input type="number" id="speedLimitSize" min="20" max="100" value="64">
-                    
-                    <label for="speedLimitOffset">Speed Limit Offset:</label>
-                    <input type="number" id="speedLimitOffset" min="0" max="300" value="100">
-                </div>
-                
-                <div class="settings-group">
-                    <h3>Line Settings</h3>
-                    <label for="normalSegmentWidth">Normal Segment Width:</label>
-                    <input type="number" id="normalSegmentWidth" min="1" max="20" value="8">
-                    
-                    <label for="curveSegmentWidth">Curve Segment Width:</label>
-                    <input type="number" id="curveSegmentWidth" min="5" max="50" value="25">
-                    
-                    <label for="borderWidth">Border Width:</label>
-                    <input type="number" id="borderWidth" min="1" max="15" value="5">
-
-                    <label for="borderOffset">Border Offset (Multiplier):</label>
-                    <input type="number" id="borderOffset" min="0.1" max="5" step="0.1" value="0.9">
-
-                    <label for="centerlineWidth">Centerline Width:</label>
-                    <input type="number" id="centerlineWidth" min="3" max="20" value="10">
-                </div>
-                
-                <div class="settings-group">
-                    <h3>Centerline Dash</h3>
-                    <label for="dashLength">Dash Length:</label>
-                    <input type="number" id="dashLength" min="10" max="50" value="25">
-                    
-                    <label for="gapLength">Gap Length:</label>
-                    <input type="number" id="gapLength" min="10" max="50" value="25">
-                </div>
-                
-                <div class="settings-group">
-                    <h3>Racing Kerbs</h3>
-                    <label for="kerbWidth">Kerb Width:</label>
-                    <input type="number" id="kerbWidth" min="2" max="35" value="15">
-                    
-                    <label for="kerbDashLength">Kerb Dash Length:</label>
-                    <input type="number" id="kerbDashLength" min="5" max="30" value="20">
-                    
-                    <label for="kerbGapLength">Kerb Gap Length:</label>
-                    <input type="number" id="kerbGapLength" min="5" max="30" value="20">
-                </div>
-                
-                <div class="settings-group">
-                    <h3>White Lines</h3>
-                    <label for="whiteLineWidth">White Line Width:</label>
-                    <input type="number" id="whiteLineWidth" min="2" max="50" value="20">
-                </div>
-                
-                <div class="settings-group">
-                    <h3>Color Settings</h3>
-                    <label for="trackFillColor">Track Fill Color:</label>
-                    <input type="color" id="trackFillColor" value="#000000">
-                    
-                    <label for="trackBorderColor">Track Border Color:</label>
-                    <input type="color" id="trackBorderColor" value="#ffffff">
-                    
-                    <label for="centerlineColor">Centerline Color:</label>
-                    <input type="color" id="centerlineColor" value="#ffffff">
-                    
-                    <label for="whiteLineColor">White Line Color:</label>
-                    <input type="color" id="whiteLineColor" value="#ffffff">
-                    
-                    <label for="segmentNumberColor">Segment Number Color:</label>
-                    <input type="color" id="segmentNumberColor" value="#ffffff">
-                    
-                    <label for="speedLimitColor">Speed Limit Color:</label>
-                    <input type="color" id="speedLimitColor" value="#ffff00">
-                    
-                    <label for="kerbWhiteColor">Kerb White Color:</label>
-                    <input type="color" id="kerbWhiteColor" value="#ffffff">
-                    
-                    <label for="kerbRedColor">Kerb Red Color:</label>
-                    <input type="color" id="kerbRedColor" value="#9f1717">
-                    
-                    <label for="debugTextColor">Debug Text Color:</label>
-                    <input type="color" id="debugTextColor" value="#ff0000">
-                </div>
-                
-                <div class="settings-buttons">
-                    <button class="btn btn-secondary" id="saveSettings">💾 Save Settings</button>
-                    <button class="btn btn-secondary" id="loadSettings">📂 Load Settings</button>
-                    <button class="btn btn-secondary" id="resetSettings">🔄 Reset to Default</button>
-                </div>
-            </div>
-
-            <div class="section">
-                <h2>💾 Export</h2>
-                <button class="btn btn-secondary" id="exportPNG">📷 Export PNG</button>
-                <button class="btn btn-secondary" id="exportSVG">🖼️ Export SVG</button>
-            </div>
-
-            <div class="section">
-                <h2>🗑️ Session</h2>
-                <button class="btn btn-danger" id="clearSession">🗑️ Clear Session</button>
-                <p style="font-size: 12px; color: #666; margin-top: 5px;">
-                    Clears saved map and view data
-                </p>
-            </div>
-
-            <div class="loading" id="loading">
-                <div class="spinner"></div>
-                <p>Processing...</p>
             </div>
         </div>
 
         <div class="main-content">
             <div class="canvas-container">
-                <svg id="trackCanvas" viewBox="0 0 1000 800" preserveAspectRatio="xMidYMid meet">
+                <svg id="trackCanvas" viewBox="0 0 1400 800" preserveAspectRatio="xMidYMid meet">
                     <defs>
                         <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
-                            <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#e0e0e0" stroke-width="1"/>
+                            <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#2a2a2a" stroke-width="1"/>
                         </pattern>
                     </defs>
                     <rect width="100%" height="100%" fill="url(#grid)" />
-                    <text x="50%" y="50%" text-anchor="middle" fill="#ccc" font-size="24" font-family="Arial">
+                    <text x="50%" y="50%" text-anchor="middle" fill="#6b7280" font-size="18" font-family="Inter, sans-serif">
                         Upload an SVG file to get started
                     </text>
                 </svg>
             </div>
+            
+            <div class="canvas-overlay">
+                <div class="canvas-control">
+                    <span>🔍</span>
+                    Zoom: 100%
+                </div>
+                <div class="canvas-control" id="coordinatesDisplay" style="display: none;">
+                    <span>📍</span>
+                    <span id="coordinates">0, 0</span>
+                </div>
+            </div>
         </div>
     </div>
 
+    <div class="mobile-overlay" id="mobileOverlay"></div>
     <div class="status" id="status"></div>
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Processing...</p>
+    </div>
 
     <script src="track-generator.js"></script>
+    <script>
+        // Sidebar functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const sidebarToggle = document.getElementById('sidebarToggle');
+            const sidebar = document.getElementById('sidebar');
+            const container = document.getElementById('container');
+            const mobileOverlay = document.getElementById('mobileOverlay');
+            const exportDropdownBtn = document.getElementById('exportDropdownBtn');
+            const exportMenu = document.getElementById('exportMenu');
+            
+            // Sidebar toggle
+            sidebarToggle.addEventListener('click', function() {
+                if (window.innerWidth <= 768) {
+                    sidebar.classList.toggle('mobile-open');
+                    mobileOverlay.classList.toggle('active');
+                } else {
+                    container.classList.toggle('sidebar-collapsed');
+                    sidebar.classList.toggle('collapsed');
+                }
+            });
+            
+            // Mobile overlay click
+            mobileOverlay.addEventListener('click', function() {
+                sidebar.classList.remove('mobile-open');
+                mobileOverlay.classList.remove('active');
+            });
+            
+            // Export dropdown functionality
+            exportDropdownBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                exportMenu.classList.toggle('show');
+            });
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function() {
+                exportMenu.classList.remove('show');
+            });
+            
+            // Prevent dropdown from closing when clicking inside
+            exportMenu.addEventListener('click', function(e) {
+                e.stopPropagation();
+            });
+            
+            // Export menu actions
+            document.getElementById('exportPNGFromMenu').addEventListener('click', function() {
+                exportMenu.classList.remove('show');
+                document.getElementById('exportPNG').click();
+            });
+            
+            document.getElementById('exportSVGFromMenu').addEventListener('click', function() {
+                exportMenu.classList.remove('show');
+                document.getElementById('exportSVG').click();
+            });
+            
+            // Section collapsing
+            document.querySelectorAll('.section-header').forEach(header => {
+                header.addEventListener('click', function() {
+                    const section = this.parentElement;
+                    section.classList.toggle('collapsed');
+                });
+            });
+            
+            // Quick actions
+            document.getElementById('quickGenerate').addEventListener('click', function() {
+                document.getElementById('generateBtn').click();
+            });
+            
+            // Handle window resize
+            window.addEventListener('resize', function() {
+                if (window.innerWidth > 768) {
+                    sidebar.classList.remove('mobile-open');
+                    mobileOverlay.classList.remove('active');
+                }
+                // Close export menu on resize
+                exportMenu.classList.remove('show');
+            });
+        });
+    </script>
 </body>
 </html>
