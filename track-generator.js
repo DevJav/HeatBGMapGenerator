@@ -495,7 +495,7 @@ class HeatTrackGenerator {
                 distance: targetDistance,
                 is_curve: false,
                 speed_limit: 0,
-                has_kerb: true,
+                has_kerb: false,
                 kerb_side: 'left', // 'left', 'right', or 'both'
                 has_white_line: true,
                 white_line_side: 'right', // 'left' or 'right'
@@ -1658,7 +1658,15 @@ class HeatTrackGenerator {
         
         segment.is_curve = !segment.is_curve;
         if (segment.is_curve) {
-            segment.speed_limit = segment.speed_limit || parseInt(document.getElementById('speedLimit').value);
+            // Prompt user for speed limit when creating a curve
+            const speedLimit = this.promptForSpeedLimit();
+            if (speedLimit !== null) {
+                segment.speed_limit = speedLimit;
+            } else {
+                // User cancelled, revert curve status
+                segment.is_curve = false;
+                return;
+            }
         }
         
         // Recalculate spaces to next curve for all segments since curve status changed
@@ -1673,6 +1681,26 @@ class HeatTrackGenerator {
         this.saveSession();
         
         this.showStatus(`Segment ${segmentId} ${segment.is_curve ? 'marked as curve' : 'unmarked as curve'}`, 'success');
+    }
+
+    promptForSpeedLimit() {
+        const speedLimit = prompt(
+            "Enter speed limit for this curve: \n"
+        );
+        
+        // Check if user cancelled
+        if (speedLimit === null) {
+            return null;
+        }
+        
+        // Parse and validate the input
+        const parsedSpeed = parseInt(speedLimit);
+        if (isNaN(parsedSpeed)) {
+            alert("Invalid speed limit. Please enter a number.");
+            return this.promptForSpeedLimit(); // Ask again
+        }
+        
+        return parsedSpeed;
     }
 
     handleKerbAreaSelection(element) {
