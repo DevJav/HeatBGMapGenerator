@@ -21,7 +21,7 @@ class HeatTrackGenerator {
             segmentNumberOffset: 140, // Distance to offset numbers from centerline
             distanceSignSize: 60, // Size of the distance sign image
             speedLimitSize: 64,
-            speedLimitOffset: 160, // Distance to offset speed limits from centerline
+            speedLimitOffset: 230, // Distance to offset speed limits from centerline
             normalSegmentWidth: 8,
             curveSegmentWidth: 25,
             borderWidth: 5,
@@ -48,6 +48,10 @@ class HeatTrackGenerator {
         
         // Load saved settings or use defaults
         this.visualSettings = this.loadVisualSettings();
+        
+        // Image cache for base64 data URIs
+        this.imageCache = {};
+        this.loadImagesAsDataURI();
         
         this.initializeEventListeners();
         this.setupSVGInteraction();
@@ -138,6 +142,29 @@ class HeatTrackGenerator {
         
         // Debug button
         document.getElementById('clearDebugBtn').addEventListener('click', this.clearDebugPoints.bind(this));
+    }
+
+    // Load images as base64 data URIs for SVG export compatibility
+    async loadImagesAsDataURI() {
+        const imagePaths = ['speed_limit_sign.png', 'distance_sign.png'];
+        
+        for (const imagePath of imagePaths) {
+            try {
+                const response = await fetch(imagePath);
+                const blob = await response.blob();
+                const reader = new FileReader();
+                
+                reader.onload = () => {
+                    this.imageCache[imagePath] = reader.result;
+                };
+                
+                reader.readAsDataURL(blob);
+            } catch (error) {
+                console.warn(`Failed to load image ${imagePath}:`, error);
+                // Fallback to original path if base64 loading fails
+                this.imageCache[imagePath] = imagePath;
+            }
+        }
     }
 
     setupSVGInteraction() {
@@ -1365,27 +1392,47 @@ class HeatTrackGenerator {
         const speedLimitInfo = this.calculateSpeedLimitPosition(segment);
         if (!speedLimitInfo) return null;
         
-        const speedText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        speedText.setAttribute('id', `speed-text-${segment.segment_number}`);
-        speedText.setAttribute('x', speedLimitInfo.position[0]);
-        speedText.setAttribute('y', speedLimitInfo.position[1]);
-        
         // Calculate rotation angle from direction vector
         const angle = Math.atan2(speedLimitInfo.direction[1], speedLimitInfo.direction[0]) * 180 / Math.PI;
-        speedText.setAttribute('transform', `rotate(${angle} ${speedLimitInfo.position[0]} ${speedLimitInfo.position[1]})`);
         
+        // Create a group for the speed limit sign (image + text)
+        const signGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        signGroup.setAttribute('id', `speed-text-${segment.segment_number}`);
+        signGroup.setAttribute('class', 'speed-limit-text');
+        signGroup.setAttribute('data-segment-id', segment.segment_number);
+        signGroup.setAttribute('transform', `translate(${speedLimitInfo.position[0]}, ${speedLimitInfo.position[1]}) rotate(${angle})`);
+        signGroup.style.pointerEvents = (this.currentMode === 'edit' || this.currentMode === 'curve') ? 'auto' : 'none';
+        signGroup.style.cursor = this.currentMode === 'curve' ? 'pointer' : 'default';
+        
+        // Calculate size based on visual settings (3x larger for better visibility)
+        const signSize = this.visualSettings.speedLimitSize * 3;
+        
+        // Create the speed limit sign image
+        const signImage = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+        signImage.setAttribute('href', this.imageCache['speed_limit_sign.png'] || 'speed_limit_sign.png');
+        signImage.setAttribute('x', -signSize / 2);
+        signImage.setAttribute('y', -signSize / 2);
+        signImage.setAttribute('width', signSize);
+        signImage.setAttribute('height', signSize);
+        signImage.setAttribute('class', 'speed-limit-sign-image');
+        signGroup.appendChild(signImage);
+        
+        // Create the speed limit text on top of the image
+        const speedText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        speedText.setAttribute('x', 0);
+        speedText.setAttribute('y', 0);
         speedText.setAttribute('text-anchor', 'middle');
+        speedText.setAttribute('dy', '0.1em');
         speedText.setAttribute('dominant-baseline', 'middle');
-        speedText.setAttribute('fill', this.visualSettings.speedLimitColor);
-        speedText.setAttribute('font-size', this.visualSettings.speedLimitSize);
+        speedText.setAttribute('fill', '#000000'); // Black text for visibility on the sign
+        speedText.setAttribute('font-size', this.visualSettings.speedLimitSize * 1.8); // Scaled proportionally with the sign
         speedText.setAttribute('font-weight', 'bold');
-        speedText.setAttribute('stroke', 'black');
-        speedText.setAttribute('stroke-width', '0.5');
-        speedText.setAttribute('class', 'speed-limit-text');
-        speedText.style.pointerEvents = (this.currentMode === 'edit' || this.currentMode === 'curve') ? 'auto' : 'none';
+        speedText.setAttribute('class', 'speed-limit-sign-number');
         speedText.textContent = segment.speed_limit;
-        group.appendChild(speedText);
-        return speedText;
+        signGroup.appendChild(speedText);
+        
+        group.appendChild(signGroup);
+        return signGroup;
     }
 
     createDistanceSign(segment, numberInfo, group) {
@@ -1405,7 +1452,7 @@ class HeatTrackGenerator {
         
         // Create the distance sign image
         const signImage = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-        signImage.setAttribute('href', 'distance_sign.png');
+        signImage.setAttribute('href', this.imageCache['distance_sign.png'] || 'distance_sign.png');
         signImage.setAttribute('x', -signSize / 2);
         signImage.setAttribute('y', -signSize / 2);
         signImage.setAttribute('width', signSize);
@@ -1418,6 +1465,7 @@ class HeatTrackGenerator {
         numberText.setAttribute('x', 0);
         numberText.setAttribute('y', 0);
         numberText.setAttribute('text-anchor', 'middle');
+        numberText.setAttribute('dy', '0.1em');
         numberText.setAttribute('dominant-baseline', 'middle');
         numberText.setAttribute('fill', '#000000'); // Black text for visibility on the sign
         numberText.setAttribute('font-size', this.visualSettings.segmentNumberSize * 0.8); // Slightly smaller than the sign
@@ -1613,7 +1661,7 @@ class HeatTrackGenerator {
                 // In curve mode, clicking on numbers or distance signs toggles their side
                 this.handleNumberSideToggle(element);
                 handledByMode = true;
-            } else if (element.classList.contains('speed-limit-text')) {
+            } else if (element.classList.contains('speed-limit-text') || element.classList.contains('speed-limit-sign-image') || element.classList.contains('speed-limit-sign-number')) {
                 // In curve mode, clicking on speed limits toggles their side
                 this.handleSpeedLimitSideToggle(element);
                 handledByMode = true;
@@ -1861,7 +1909,18 @@ class HeatTrackGenerator {
     }
     
     handleSpeedLimitSideToggle(element) {
-        const segmentId = parseInt(element.id.replace('speed-text-', ''));
+        // Get segment ID from the element or its parent group
+        let segmentId;
+        if (element.id && element.id.startsWith('speed-text-')) {
+            // Clicked directly on the group
+            segmentId = parseInt(element.id.replace('speed-text-', ''));
+        } else if (element.parentElement && element.parentElement.id && element.parentElement.id.startsWith('speed-text-')) {
+            // Clicked on a child element (image or text) of the speed limit group
+            segmentId = parseInt(element.parentElement.id.replace('speed-text-', ''));
+        } else {
+            return;
+        }
+        
         const segment = this.trackData.segments.find(s => s.segment_number === segmentId);
         if (!segment || !segment.is_curve) return;
         
@@ -1932,7 +1991,7 @@ class HeatTrackGenerator {
         
         const visualLine = trackGroup.querySelector(`[data-segment-id="${segmentId}"].segment-line-visual`);
         const speedTextId = `speed-text-${segmentId}`;
-        let speedText = trackGroup.querySelector(`#${speedTextId}`);
+        let speedSignGroup = trackGroup.querySelector(`#${speedTextId}`);
         
         if (visualLine) {
             visualLine.setAttribute('stroke-width', this.getSegmentStrokeWidth(segment.is_curve));
@@ -1940,26 +1999,37 @@ class HeatTrackGenerator {
             if (segment.is_curve) {
                 const lineCoords = this.calculateSegmentLineCoordinates(segment);
                 if (lineCoords) {
-                    if (!speedText) {
-                        speedText = this.createSpeedLimitText(segment, trackGroup);
+                    if (!speedSignGroup) {
+                        speedSignGroup = this.createSpeedLimitText(segment, trackGroup);
                     } else {
                         // Update speed limit position with the new offset system
                         const speedLimitInfo = this.calculateSpeedLimitPosition(segment);
                         if (speedLimitInfo) {
-                            speedText.setAttribute('font-size', this.visualSettings.speedLimitSize);
-                            speedText.setAttribute('x', speedLimitInfo.position[0]);
-                            speedText.setAttribute('y', speedLimitInfo.position[1]);
-                            
-                            // Update rotation angle
+                            // Update rotation angle and position
                             const angle = Math.atan2(speedLimitInfo.direction[1], speedLimitInfo.direction[0]) * 180 / Math.PI;
-                            speedText.setAttribute('transform', `rotate(${angle} ${speedLimitInfo.position[0]} ${speedLimitInfo.position[1]})`);
+                            speedSignGroup.setAttribute('transform', `translate(${speedLimitInfo.position[0]}, ${speedLimitInfo.position[1]}) rotate(${angle})`);
                             
-                            speedText.textContent = segment.speed_limit;
+                            // Update the text content within the sign
+                            const speedText = speedSignGroup.querySelector('.speed-limit-sign-number');
+                            if (speedText) {
+                                speedText.textContent = segment.speed_limit;
+                                speedText.setAttribute('font-size', this.visualSettings.speedLimitSize * 1.8);
+                            }
+                            
+                            // Update the image size
+                            const speedImage = speedSignGroup.querySelector('.speed-limit-sign-image');
+                            if (speedImage) {
+                                const signSize = this.visualSettings.speedLimitSize * 3;
+                                speedImage.setAttribute('x', -signSize / 2);
+                                speedImage.setAttribute('y', -signSize / 2);
+                                speedImage.setAttribute('width', signSize);
+                                speedImage.setAttribute('height', signSize);
+                            }
                         }
                     }
                 }
             } else {
-                if (speedText) speedText.remove();
+                if (speedSignGroup) speedSignGroup.remove();
             }
         }
     }
