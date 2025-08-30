@@ -146,7 +146,7 @@ class HeatTrackGenerator {
 
     // Load images as base64 data URIs for SVG export compatibility
     async loadImagesAsDataURI() {
-        const imagePaths = ['speed_limit_sign.png', 'distance_sign.png'];
+    const imagePaths = ['assets/speed_limit_sign.png', 'assets/distance_sign.png'];
         
         for (const imagePath of imagePaths) {
             try {
@@ -1409,7 +1409,7 @@ class HeatTrackGenerator {
         
         // Create the speed limit sign image
         const signImage = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-        signImage.setAttribute('href', this.imageCache['speed_limit_sign.png'] || 'speed_limit_sign.png');
+    signImage.setAttribute('href', this.imageCache['assets/speed_limit_sign.png'] || 'assets/speed_limit_sign.png');
         signImage.setAttribute('x', -signSize / 2);
         signImage.setAttribute('y', -signSize / 2);
         signImage.setAttribute('width', signSize);
@@ -1452,7 +1452,7 @@ class HeatTrackGenerator {
         
         // Create the distance sign image
         const signImage = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-        signImage.setAttribute('href', this.imageCache['distance_sign.png'] || 'distance_sign.png');
+    signImage.setAttribute('href', this.imageCache['assets/distance_sign.png'] || 'assets/distance_sign.png');
         signImage.setAttribute('x', -signSize / 2);
         signImage.setAttribute('y', -signSize / 2);
         signImage.setAttribute('width', signSize);
