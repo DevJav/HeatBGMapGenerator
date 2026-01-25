@@ -110,6 +110,7 @@ class HeatTrackGenerator {
         // Visual settings listeners
         document.getElementById('segmentNumberSize').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('segmentNumberOffset').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('distanceSignSize').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('speedLimitSize').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('speedLimitOffset').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('normalSegmentWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
@@ -123,7 +124,7 @@ class HeatTrackGenerator {
         document.getElementById('kerbDashLength').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('kerbGapLength').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('whiteLineWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
-        
+
         // Color settings listeners
         document.getElementById('trackFillColor').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('trackBorderColor').addEventListener('change', this.onVisualSettingChange.bind(this));
