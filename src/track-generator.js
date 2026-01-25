@@ -1452,7 +1452,7 @@ class HeatTrackGenerator {
         
         // Create the distance sign image
         const signImage = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-    signImage.setAttribute('href', this.imageCache['assets/distance_sign.png'] || 'assets/distance_sign.png');
+        signImage.setAttribute('href', this.imageCache['assets/distance_sign.png'] || 'assets/distance_sign.png');
         signImage.setAttribute('x', -signSize / 2);
         signImage.setAttribute('y', -signSize / 2);
         signImage.setAttribute('width', signSize);
