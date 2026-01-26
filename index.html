@@ -755,12 +755,16 @@
                             Curves
                         </button>
                         <button class="btn" id="kerbMode">
-                            <span>🏁</span>
+                            <span>🚧</span>
                             Kerbs
                         </button>
                         <button class="btn" id="whiteLineMode">
                             <span>⚪</span>
                             Lines
+                        </button>
+                        <button class="btn" id="startFinishMode">
+                            <span>🏁</span>
+                            Start/Finish
                         </button>
                     </div>
                     
@@ -786,6 +790,11 @@
                             Clear Debug Points
                         </button>
                     </div>
+                    <div class="curve-controls" id="startFinishControls" style="display: none;">
+                        <p><strong>Start/Finish Line</strong><br>
+                        Click on a track division to set or move the start/finish line position.
+                        The grid will be updated to reflect the new start/finish line position.</p>
+                    </div>
                 </div>
             </div>
             <div class="section collapsed">
@@ -801,7 +810,7 @@
                         <h3>Text Settings</h3>
                         <div class="form-group">
                             <label for="segmentNumberSize">Segment Number Size</label>
-                            <input type="number" id="segmentNumberSize" min="8" max="280" value="38">
+                            <input type="number" id="segmentNumberSize" min="1" max="280" value="38">
                         </div>
                         <div class="form-group">
                             <label for="segmentNumberOffset">Segment Number Offset</label>
@@ -809,7 +818,7 @@
                         </div>
                         <div class="form-group">
                             <label for="speedLimitSize">Speed Limit Size</label>
-                            <input type="number" id="speedLimitSize" min="20" max="100" value="64">
+                            <input type="number" id="speedLimitSize" min="1" max="100" value="64">
                         </div>
                         <div class="form-group">
                             <label for="speedLimitOffset">Speed Limit Offset</label>
@@ -825,7 +834,7 @@
                         </div>
                         <div class="form-group">
                             <label for="curveSegmentWidth">Curve Segment Width</label>
-                            <input type="number" id="curveSegmentWidth" min="5" max="50" value="25">
+                            <input type="number" id="curveSegmentWidth" min="2" max="50" value="25">
                         </div>
                         <div class="form-group">
                             <label for="borderWidth">Border Width</label>
@@ -837,7 +846,7 @@
                         </div>
                         <div class="form-group">
                             <label for="centerlineWidth">Centerline Width</label>
-                            <input type="number" id="centerlineWidth" min="3" max="20" value="10">
+                            <input type="number" id="centerlineWidth" min="1" max="20" value="10">
                         </div>
                     </div>
                     
@@ -845,11 +854,11 @@
                         <h3>Centerline Dash</h3>
                         <div class="form-group">
                             <label for="dashLength">Dash Length</label>
-                            <input type="number" id="dashLength" min="10" max="50" value="25">
+                            <input type="number" id="dashLength" min="1" max="50" value="25">
                         </div>
                         <div class="form-group">
                             <label for="gapLength">Gap Length</label>
-                            <input type="number" id="gapLength" min="10" max="50" value="25">
+                            <input type="number" id="gapLength" min="1" max="50" value="25">
                         </div>
                     </div>
                     
@@ -857,26 +866,42 @@
                         <h3>Racing Kerbs</h3>
                         <div class="form-group">
                             <label for="kerbWidth">Kerb Width</label>
-                            <input type="number" id="kerbWidth" min="2" max="35" value="15">
+                            <input type="number" id="kerbWidth" min="1" max="35" value="15">
                         </div>
                         <div class="form-group">
                             <label for="kerbDashLength">Kerb Dash Length</label>
-                            <input type="number" id="kerbDashLength" min="5" max="30" value="20">
+                            <input type="number" id="kerbDashLength" min="1" max="30" value="20">
                         </div>
                         <div class="form-group">
                             <label for="kerbGapLength">Kerb Gap Length</label>
-                            <input type="number" id="kerbGapLength" min="5" max="30" value="20">
+                            <input type="number" id="kerbGapLength" min="1" max="30" value="20">
                         </div>
                     </div>
                     
                     <div class="settings-group">
                         <h3>White Lines</h3>
                         <div class="form-group">
-                            <label for="whiteLineWidth">White Line Width</label>
+                            <label for="whiteLineWidth">Racing Line Width</label>
                             <input type="number" id="whiteLineWidth" min="2" max="50" value="20">
                         </div>
                     </div>
-                    
+
+                    <div class="settings-group">
+                        <h3>Start/Finish</h3>
+                        <div class="form-group">
+                            <label for="startFinishSegmentWidth">Start/Finish Line Width</label>
+                            <input type="number" id="startFinishSegmentWidth" min="2" max="100" value="40">
+                        </div>
+                        <div class="form-group">
+                            <label for="gridRows">Grid Rows</label>
+                            <input type="number" id="gridRows" min="1" max="10" value="4">
+                        </div>
+                        <div class="form-group">
+                            <label for="gridWidth">Grid Width</label>
+                            <input type="number" id="gridWidth" min="0.01" max="1" value="0.7" step="0.01">
+                        </div>
+                    </div>
+
                     <div class="settings-group">
                         <h3>Colors</h3>
                         <div class="form-group">
@@ -892,7 +917,7 @@
                             <input type="color" id="centerlineColor" value="#ffffff">
                         </div>
                         <div class="form-group">
-                            <label for="whiteLineColor">White Lines</label>
+                            <label for="whiteLineColor">Racing Lines</label>
                             <input type="color" id="whiteLineColor" value="#ffffff">
                         </div>
                         <div class="form-group">
