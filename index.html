@@ -770,7 +770,13 @@
                     
                     <div class="curve-controls" id="kerbControls" style="display: none;">
                         <p><strong>Racing Kerbs</strong><br>
-                        Add red & white striped kerbs to track borders. Click on track borders to add/remove kerbs on that side.</p>
+                        Add striped kerbs to track borders, colors are configurable in the visual settings. Click on track borders to add/remove kerbs on that side.</p>
+                        <button class="btn" id="regularKerbMode">
+                            <span>Regular</span>
+                        </button>
+                        <button class="btn" id="chicaneKerbMode">
+                            <span>Chicane</span>
+                        </button>
                     </div>
                     
                     <div class="curve-controls" id="whiteLineControls" style="display: none;">
@@ -908,8 +914,12 @@
                             <input type="color" id="kerbWhiteColor" value="#ffffff">
                         </div>
                         <div class="form-group">
-                            <label for="kerbRedColor">Kerb Red</label>
+                            <label for="kerbRedColor">Kerb Regular</label>
                             <input type="color" id="kerbRedColor" value="#9f1717">
+                        </div>
+                        <div class="form-group">
+                            <label for="kerbChicaneColor">Kerb Chicane</label>
+                            <input type="color" id="kerbChicaneColor" value="#1e90ff">
                         </div>
                         <div class="form-group">
                             <label for="debugTextColor">Debug Text</label>

@@ -44,6 +44,7 @@ class HeatTrackGenerator {
             debugTextColor: '#ff0000',
             kerbWhiteColor: '#ffffff',
             kerbRedColor: '#9f1717',
+            kerbChicaneColor: '#1e90ff'
         };
         
         // Load saved settings or use defaults
@@ -78,6 +79,8 @@ class HeatTrackGenerator {
         document.getElementById('editMode').addEventListener('click', () => this.setMode('edit'));
         document.getElementById('curveMode').addEventListener('click', () => this.setMode('curve'));
         document.getElementById('kerbMode').addEventListener('click', () => this.setMode('kerb'));
+        document.getElementById('regularKerbMode').addEventListener('click', () => this.setMode('regularKerb'));
+        document.getElementById('chicaneKerbMode').addEventListener('click', () => this.setMode('chicaneKerb'));
         document.getElementById('whiteLineMode').addEventListener('click', () => this.setMode('whiteLine'));
 
         // Export buttons
@@ -134,6 +137,7 @@ class HeatTrackGenerator {
         document.getElementById('debugTextColor').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('kerbWhiteColor').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('kerbRedColor').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('kerbChicaneColor').addEventListener('change', this.onVisualSettingChange.bind(this));
         
         // Settings buttons
         document.getElementById('saveSettings').addEventListener('click', this.saveVisualSettings.bind(this));
@@ -535,6 +539,7 @@ class HeatTrackGenerator {
                 is_curve: false,
                 speed_limit: 0,
                 has_kerb: false,
+                has_chicane_kerb: false,
                 kerb_side: 'left', // 'left', 'right', or 'both'
                 has_white_line: true,
                 white_line_side: 'right', // 'left' or 'right'
@@ -826,9 +831,15 @@ class HeatTrackGenerator {
         // Group contiguous kerb segments and render them as unified kerbs
         const kerbSegments = this.trackData.segments.filter(s => s.has_kerb);
         const contiguousGroups = this.groupContiguousKerbSegments(kerbSegments);
+
+        const chicaneKerbSegments = this.trackData.segments.filter(s => s.has_chicane_kerb);;
+        const chicaneContiguousGroups = this.groupContiguousKerbSegments(chicaneKerbSegments);
         
         contiguousGroups.forEach(kerbGroup => {
-            this.createUnifiedKerbForGroup(kerbGroup, group);
+            this.createUnifiedKerbForGroup(kerbGroup, group, 'regular');
+        });
+        chicaneContiguousGroups.forEach(kerbGroup => {
+            this.createUnifiedKerbForGroup(kerbGroup, group, 'chicane');
         });
     }
 
@@ -901,7 +912,7 @@ class HeatTrackGenerator {
         return false;
     }
 
-    createUnifiedKerbForGroup(kerbGroup, group) {
+    createUnifiedKerbForGroup(kerbGroup, group, kerbType) {
         // Calculate the combined boundaries of all segments in the group
         const segments = kerbGroup.segments;
         const firstSegment = segments[0];
@@ -935,7 +946,7 @@ class HeatTrackGenerator {
         
         // Create unified kerb paths for each continuous side
         sidesToRender.forEach(sideInfo => {
-            this.createUnifiedKerbPath(sideInfo.startRatio, sideInfo.endRatio, sideInfo.side, borderDistance, group, `${firstSegment.segment_number}-${sideInfo.side}`);
+            this.createUnifiedKerbPath(sideInfo.startRatio, sideInfo.endRatio, sideInfo.side, borderDistance, group, `${firstSegment.segment_number}-${sideInfo.side}`, kerbType);
         });
     }
 
@@ -1014,7 +1025,7 @@ class HeatTrackGenerator {
         return [...leftRuns, ...rightRuns];
     }
 
-    createUnifiedKerbPath(startRatio, endRatio, side, borderDistance, group, groupId) {
+    createUnifiedKerbPath(startRatio, endRatio, side, borderDistance, group, groupId, kerbType) {
         // Get the centerline segment for the unified kerb
         const centerlineStartIndex = Math.floor(startRatio * (this.trackData.centerline.length - 1));
         const centerlineEndIndex = Math.ceil(endRatio * (this.trackData.centerline.length - 1));
@@ -1031,7 +1042,7 @@ class HeatTrackGenerator {
         const kerbPoints = this.createParallelLine(centerlineSegment, kerbOffset, side);
         
         if (kerbPoints.length > 1) {
-            this.createKerbPath(kerbPoints, `unified-${side}-kerb-group-${groupId}`, group);
+            this.createKerbPath(kerbPoints, `unified-${side}-kerb-group-${groupId}`, group, kerbType);
         }
     }
 
@@ -1248,7 +1259,7 @@ class HeatTrackGenerator {
 
     createKerbHitAreas(segment, group) {
         // Only create kerb hit areas in kerb mode
-        if (this.currentMode !== 'kerb') return;
+        if (!(this.currentMode === 'regularKerb' || this.currentMode === 'chicaneKerb')) return;
         
         const segmentProgress = segment.distance || 0;
         const totalLength = this.calculateTrackLength();
@@ -1509,7 +1520,8 @@ class HeatTrackGenerator {
         switch (this.currentMode) {
             case 'edit': return 'move';
             case 'curve':
-            case 'kerb':
+            case 'regularKerb':
+            case 'chicaneKerb':
             case 'whiteLine': return 'pointer';
             case 'pan': return 'grab';
             default: return 'crosshair';
@@ -1590,7 +1602,7 @@ class HeatTrackGenerator {
         
         // Show/hide controls
         document.getElementById('curveControls').style.display = mode === 'curve' ? 'block' : 'none';
-        document.getElementById('kerbControls').style.display = mode === 'kerb' ? 'block' : 'none';
+        document.getElementById('kerbControls').style.display = (mode === 'kerb' || mode === 'regularKerb' || mode === 'chicaneKerb') ? 'block' : 'none';
         document.getElementById('whiteLineControls').style.display = mode === 'whiteLine' ? 'block' : 'none';
         document.getElementById('editControls').style.display = mode === 'edit' ? 'block' : 'none';
         
@@ -1666,9 +1678,14 @@ class HeatTrackGenerator {
                 this.handleSpeedLimitSideToggle(element);
                 handledByMode = true;
             }
-        } else if (this.currentMode === 'kerb') {
+        } else if (this.currentMode === 'regularKerb') {
             if (element.classList.contains('kerb-hit-area')) {
-                this.handleKerbAreaSelection(element);
+                this.handleKerbAreaSelection(element, 'regular');
+                handledByMode = true;
+            }
+        } else if (this.currentMode === 'chicaneKerb') {
+            if (element.classList.contains('kerb-hit-area')) {
+                this.handleKerbAreaSelection(element, 'chicane');
                 handledByMode = true;
             }
         } else if (this.currentMode === 'whiteLine') {
@@ -1828,31 +1845,68 @@ class HeatTrackGenerator {
         return parsedSpeed;
     }
 
-    handleKerbAreaSelection(element) {
+    handleKerbAreaSelection(element, type) {
         const segmentId = parseInt(element.getAttribute('data-segment-id'));
         const clickedSide = element.getAttribute('data-kerb-side');
         const segment = this.trackData.segments.find(s => s.segment_number === segmentId);
         if (!segment) return;
         
         // Toggle kerb on the clicked side
-        if (!segment.has_kerb) {
+        if (!segment.has_kerb && !segment.has_chicane_kerb) {
             // No kerbs yet, add kerb to clicked side
-            segment.has_kerb = true;
+             if (type === 'regular') {
+                segment.has_kerb = true;
+             } else if (type === 'chicane') {
+                segment.has_chicane_kerb = true;
+             }
             segment.kerb_side = clickedSide;
             this.showStatus(`Segment ${segmentId} kerb added (${clickedSide} side)`, 'success');
         } else {
             // Already has kerbs, check current configuration
             if (segment.kerb_side === clickedSide) {
                 // Clicking the same side that already has kerbs - remove them
-                segment.has_kerb = false;
-                segment.kerb_side = 'both';
-                this.showStatus(`Segment ${segmentId} kerb removed`, 'success');
+                if (type === 'regular' && segment.has_kerb) {
+                    segment.has_kerb = false;
+                    segment.kerb_side = 'both';
+                    this.showStatus(`Segment ${segmentId} kerb removed`, 'success');
+                } else if (type === 'regular' && segment.has_chicane_kerb) {
+                    segment.has_chicane_kerb = false;
+                    segment.has_kerb = true;
+                    segment.kerb_side = clickedSide;
+                    this.showStatus(`Segment ${segmentId} kerb type changed`, 'success');
+                } else if (type === 'chicane' && segment.has_kerb) {
+                    segment.has_kerb = false;
+                    segment.has_chicane_kerb = true;
+                    segment.kerb_side = clickedSide;
+                    this.showStatus(`Segment ${segmentId} kerb type changed`, 'success');
+                } else if (type === 'chicane' && segment.has_chicane_kerb) {
+                    segment.has_chicane_kerb = false;
+                    this.showStatus(`Segment ${segmentId} chicane kerb removed`, 'success');
+                    segment.kerb_side = 'both';
+                }
             } else if (segment.kerb_side === 'both') {
                 // Has kerbs on both sides, switch to only the clicked side
                 segment.kerb_side = clickedSide;
-                this.showStatus(`Segment ${segmentId} kerb: ${clickedSide} side only`, 'success');
+                if ((type === 'regular' && segment.has_kerb || type === 'chicane' && segment.has_chicane_kerb)) {
+                    this.showStatus(`Segment ${segmentId} kerb: ${clickedSide} side only`, 'success');
+                } else if (type === 'regular' && segment.has_chicane_kerb) {
+                    segment.has_kerb = true;
+                    segment.has_chicane_kerb = false;
+                    this.showStatus(`Segment ${segmentId} kerb: ${clickedSide} side only`, 'success');
+                } else if (type === 'chicane' && segment.has_kerb) {
+                    segment.has_kerb = false;
+                    segment.has_chicane_kerb = true;
+                    this.showStatus(`Segment ${segmentId} kerb: ${clickedSide} side only`, 'success');
+                }
             } else {
                 // Has kerbs on opposite side, add to both sides
+                if (type === 'regular') {
+                    segment.has_kerb = true;
+                    segment.has_chicane_kerb = false;
+                } else if (type === 'chicane') {
+                    segment.has_kerb = false;
+                    segment.has_chicane_kerb = true;
+                }
                 segment.kerb_side = 'both';
                 this.showStatus(`Segment ${segmentId} kerbs: both sides`, 'success');
             }
@@ -2582,16 +2636,17 @@ class HeatTrackGenerator {
         // Calculate border distance for white track borders
         const borderDistance = (this.trackData.track_width / 2) * this.visualSettings.borderOffset;
         
+        const kerbType = segment.has_chicane_kerb ? 'chicane' : 'regular';
         // Create kerb paths that start at the white border and extend outward
         if (segment.kerb_side === 'left' || segment.kerb_side === 'both') {
-            this.createKerbPathAtBorder(segment, 'left', borderDistance, group);
+            this.createKerbPathAtBorder(segment, 'left', borderDistance, group, kerbType);
         }
         if (segment.kerb_side === 'right' || segment.kerb_side === 'both') {
-            this.createKerbPathAtBorder(segment, 'right', borderDistance, group);
+            this.createKerbPathAtBorder(segment, 'right', borderDistance, group, kerbType);
         }
     }
 
-    createKerbPathAtBorder(segment, side, borderDistance, group) {
+    createKerbPathAtBorder(segment, side, borderDistance, group, kerbType) {
         const segmentProgress = segment.distance || 0;
         const totalLength = this.calculateTrackLength();
         
@@ -2627,7 +2682,7 @@ class HeatTrackGenerator {
         ), kerbOffset, side);
         
         if (kerbPoints.length > 1) {
-            this.createKerbPath(kerbPoints, `${side}-kerb-${segment.segment_number}`, group);
+            this.createKerbPath(kerbPoints, `${side}-kerb-${segment.segment_number}`, group, kerbType);
         }
     }
 
@@ -2637,7 +2692,7 @@ class HeatTrackGenerator {
         return borderPoints.slice(startIndex, endIndex + 1);
     }
 
-    createKerbPath(points, id, group) {
+    createKerbPath(points, id, group, kerbType) {
         if (points.length < 2) return;
         
         const pathData = points.map((point, index) => 
@@ -2656,7 +2711,12 @@ class HeatTrackGenerator {
         // Create red striped pattern on top
         const redKerbPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         redKerbPath.setAttribute('d', pathData);
-        redKerbPath.setAttribute('stroke', this.visualSettings.kerbRedColor);
+        if (kerbType === 'regular') {
+            redKerbPath.setAttribute('stroke', this.visualSettings.kerbRedColor);
+        } else if (kerbType === 'chicane') {
+            // Different color or style for chicane kerbs if needed
+            redKerbPath.setAttribute('stroke', this.visualSettings.kerbChicaneColor);
+        }
         redKerbPath.setAttribute('stroke-width', this.visualSettings.kerbWidth);
         redKerbPath.setAttribute('stroke-dasharray', `${this.visualSettings.kerbDashLength} ${this.visualSettings.kerbGapLength}`);
         redKerbPath.setAttribute('fill', 'none');
