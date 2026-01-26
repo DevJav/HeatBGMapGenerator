@@ -25,6 +25,8 @@ class HeatTrackGenerator {
             normalSegmentWidth: 8,
             curveSegmentWidth: 25,
             startFinishSegmentWidth: 40,
+            gridRows: 4,
+            gridWidth: 0.7,
             borderWidth: 5,
             borderOffset: 0.9,
             centerlineWidth: 5,
@@ -126,6 +128,8 @@ class HeatTrackGenerator {
         document.getElementById('kerbGapLength').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('whiteLineWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('startFinishSegmentWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('gridRows').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('gridWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
         
         // Color settings listeners
         document.getElementById('trackFillColor').addEventListener('change', this.onVisualSettingChange.bind(this));
@@ -694,6 +698,7 @@ class HeatTrackGenerator {
         this.renderSegmentDivisions(trackGroup);
         this.renderKerbs(trackGroup);
         this.renderWhiteLines(trackGroup);
+        this.renderGrid(trackGroup);
         //TODO Render starting grid
         svg.appendChild(trackGroup);
     }
@@ -1586,7 +1591,7 @@ class HeatTrackGenerator {
         
         if (e.target.type === 'color') {
             value = e.target.value; // Color inputs return hex strings
-        } else if (settingName === 'borderOffset') {
+        } else if (settingName === 'borderOffset' || settingName === 'gridWidth') {
             value = parseFloat(e.target.value);
         } else {
             value = parseInt(e.target.value);
@@ -2739,6 +2744,37 @@ class HeatTrackGenerator {
             length += Math.sqrt(dx * dx + dy * dy);
         }
         return length;
+    }
+
+    //Redering of the Grid
+    renderGrid(group) {
+        const startFinishSegmentIndex = this.trackData.segments.findIndex(s => s.is_start_finish === true);
+        for (let i = startFinishSegmentIndex; i > startFinishSegmentIndex - this.visualSettings.gridRows; i--) {
+                const segment = this.trackData.segments[i];
+                if (!segment) continue;
+
+                const lineCoords = this.calculateSegmentLineCoordinates(segment);
+                if (!lineCoords) return; // Skip if calculation failed
+                const p1 = lineCoords.line_start;
+                const p2 = lineCoords.line_end;
+                const angle = Math.atan2(p2[1] - p1[1], p2[0] - p1[0]) * 180 / Math.PI;
+
+                // TODO: make configurable size 
+                const imgW = this.trackData.track_width * this.visualSettings.gridWidth;
+                const imgH = 60;
+                const img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+                img.setAttribute('href', this.imageCache['assets/gridMarker.svg'] || 'assets/gridMarker.svg');
+                img.setAttribute('width', imgW);
+                img.setAttribute('height', imgH);
+                img.setAttribute('x', -imgW / 2);
+                img.setAttribute('y', -imgH / 2);
+                img.setAttribute('transform', `translate(${(p1[0] + p2[0]) / 2}, ${(p1[1] + p2[1]) / 2}) rotate(${angle})`);
+                img.setAttribute('class', 'grid-marker-image');
+                img.style.pointerEvents = 'none';
+
+                group.appendChild(img);
+            
+        }
     }
 
     // Export methods
