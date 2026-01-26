@@ -1333,8 +1333,8 @@ class HeatTrackGenerator {
                 const angle = Math.atan2(p2[1] - p1[1], p2[0] - p1[0]) * 180 / Math.PI;
 
                 // TODO: make configurable size 
-                const imgW = 40;
-                const imgH = parseFloat(this.trackData.segment_length * 0.70);
+                const imgW = this.visualSettings.startFinishSegmentWidth;
+                const imgH = imgW * 0.3;
                 const img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
                 img.setAttribute('href', this.imageCache['assets/startFinish.svg'] || 'assets/startFinish.svg');
                 img.setAttribute('width', imgW);
