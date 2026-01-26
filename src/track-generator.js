@@ -652,6 +652,8 @@ class HeatTrackGenerator {
     renderTrack(preserveView = false) {
         if (!this.trackData) return;
 
+        this.updateTrackStats();
+
         const svg = document.getElementById('trackCanvas');
         
         // Store current transform if preserving view
@@ -692,6 +694,16 @@ class HeatTrackGenerator {
         this.renderWhiteLines(trackGroup);
 
         svg.appendChild(trackGroup);
+    }
+
+    updateTrackStats() {
+        if (!this.trackData) return;
+        document.getElementById('totalLength').value = this.calculateTrackLength().toFixed(2);
+        document.getElementById('numSegments').value = this.trackData.segments.length;
+        document.getElementById('numCurves').value = this.trackData.segments.filter(s => s.is_curve).length;
+        document.getElementById('numChicanes').value = 0; //TODO: Implement chicane counting after merge
+        document.getElementById('numKerbs').value = this.trackData.segments.filter(s => s.has_kerb).length;
+        document.getElementById('numChicaneKerbs').value = 0; //TODO: Implement chicane kerb counting after merge
     }
 
     autoScaleAndCenter(trackGroup) {
