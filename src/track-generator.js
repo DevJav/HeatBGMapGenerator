@@ -33,6 +33,7 @@ class HeatTrackGenerator {
             kerbDashLength: 15,
             kerbGapLength: 10,
             whiteLineWidth: 12,
+            SpeedlimitCorner: 'First', // Distance before curve to place speed limit sign
             // Color settings
             trackFillColor: '#000000',
             trackBorderColor: '#ffffff',
@@ -126,6 +127,7 @@ class HeatTrackGenerator {
         document.getElementById('kerbDashLength').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('kerbGapLength').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('whiteLineWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('SpeedlimitCorner').addEventListener('change', this.onVisualSettingChange.bind(this));
         
         // Color settings listeners
         document.getElementById('trackFillColor').addEventListener('change', this.onVisualSettingChange.bind(this));
@@ -1402,6 +1404,7 @@ class HeatTrackGenerator {
         // Calculate the position with offset from centerline
         const speedLimitInfo = this.calculateSpeedLimitPosition(segment);
         if (!speedLimitInfo) return null;
+        if (segment.has_chicane_kerb && this.drawchicaneSpeedLimit(segment)) return null;
         
         // Calculate rotation angle from direction vector
         const angle = Math.atan2(speedLimitInfo.direction[1], speedLimitInfo.direction[0]) * 180 / Math.PI;
@@ -1420,7 +1423,7 @@ class HeatTrackGenerator {
         
         // Create the speed limit sign image
         const signImage = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-    signImage.setAttribute('href', this.imageCache['assets/speed_limit_sign.png'] || 'assets/speed_limit_sign.png');
+        signImage.setAttribute('href', this.imageCache['assets/speed_limit_sign.png'] || 'assets/speed_limit_sign.png');
         signImage.setAttribute('x', -signSize / 2);
         signImage.setAttribute('y', -signSize / 2);
         signImage.setAttribute('width', signSize);
@@ -1573,7 +1576,9 @@ class HeatTrackGenerator {
             value = e.target.value; // Color inputs return hex strings
         } else if (settingName === 'borderOffset') {
             value = parseFloat(e.target.value);
-        } else {
+        } else if (settingName === 'SpeedlimitCorner') {
+            value = e.target.value;
+        }else {
             value = parseInt(e.target.value);
         }
         
@@ -2086,6 +2091,20 @@ class HeatTrackGenerator {
                 if (speedSignGroup) speedSignGroup.remove();
             }
         }
+    }
+
+    drawchicaneSpeedLimit(segment) {
+        // This function can be implemented to draw speed limits specific to chicane kerbs if needed
+        const segmentId = segment.segment_number;
+        let i = 0
+        let ret = false
+        while (this.trackData.segments[segmentId + i].has_chicane_kerb) {
+            if (this.trackData.segments[segmentId + i].is_curve) {
+                ret = true
+            }
+            i++;
+        }
+        return this.visualSettings.SpeedlimitCorner === 'First' ? ret : !ret;
     }
 
     startSegmentDrag(element, x, y) {
