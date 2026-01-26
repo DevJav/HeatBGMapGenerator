@@ -1326,18 +1326,49 @@ class HeatTrackGenerator {
             if (!lineCoords) return; // Skip if calculation failed
 
             // Create visible segment line
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('x1', lineCoords.line_start[0]);
-            line.setAttribute('y1', lineCoords.line_start[1]);
-            line.setAttribute('x2', lineCoords.line_end[0]);
-            line.setAttribute('y2', lineCoords.line_end[1]);
-            line.setAttribute('stroke', this.getSegmentStroke(segment));
-            line.setAttribute('stroke-width', this.getSegmentStrokeWidth(segment));
-            line.setAttribute('opacity', '1');
-            line.setAttribute('class', 'segment-line-visual');
-            line.setAttribute('data-segment-id', segment.segment_number);
-            line.style.pointerEvents = 'none';
-            group.appendChild(line);
+            if (segment.is_start_finish) {
+                // Use the across-track endpoints to position the asset
+                const p1 = lineCoords.line_start;
+                const p2 = lineCoords.line_end;
+                const dx = p2[0] - p1[0];
+                const dy = p2[1] - p1[1];
+                const len = Math.hypot(dx, dy) || 1;
+                const cx = (p1[0] + p2[0]) / 2;
+                const cy = (p1[1] + p2[1]) / 2;
+
+                // Angle of the across-track vector (image will be rotated to align across the track)
+                const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+                // Size the image: width ~= line length + padding, height based on visual setting or small fraction of track width
+                const padding = parseFloat(this.trackData.track_width * 0.8) //this.visualSettings.startFinishPadding || 40);
+                const imgW = this.trackData.track_width * 0.8 //len + padding;
+                const imgH = parseFloat(this.trackData.segment_length * 0.70) //this.visualSettings.startFinishHeight || Math.max(6, (this.trackData.track_width || 300) * 0.02));
+                const img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+                img.setAttribute('href', this.imageCache['assets/startFinish.svg'] || 'assets/startFinish.svg');
+                img.setAttribute('width', imgW);
+                img.setAttribute('height', imgH);
+                img.setAttribute('x', -imgW / 2);
+                img.setAttribute('y', -imgH / 2);
+                img.setAttribute('transform', `translate(${cx}, ${cy}) rotate(${angle})`);
+                img.setAttribute('class', 'start-finish-image');
+                img.style.pointerEvents = 'none';
+
+                group.appendChild(img);
+
+            } else {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', lineCoords.line_start[0]);
+                line.setAttribute('y1', lineCoords.line_start[1]);
+                line.setAttribute('x2', lineCoords.line_end[0]);
+                line.setAttribute('y2', lineCoords.line_end[1]);
+                line.setAttribute('stroke', this.getSegmentStroke(segment));
+                line.setAttribute('stroke-width', this.getSegmentStrokeWidth(segment));
+                line.setAttribute('opacity', '1');
+                line.setAttribute('class', 'segment-line-visual');
+                line.setAttribute('data-segment-id', segment.segment_number);
+                line.style.pointerEvents = 'none';
+                group.appendChild(line);
+            }
 
             // Create invisible hit area for easier selection (for curve and edit modes)
             const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'line');
