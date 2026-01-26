@@ -1610,7 +1610,23 @@ class HeatTrackGenerator {
         document.getElementById('kerbControls').style.display = (mode === 'kerb' || mode === 'regularKerb' || mode === 'chicaneKerb') ? 'block' : 'none';
         document.getElementById('whiteLineControls').style.display = mode === 'whiteLine' ? 'block' : 'none';
         document.getElementById('editControls').style.display = mode === 'edit' ? 'block' : 'none';
-        
+
+        if (mode === 'regularKerb') {
+            const chicaneButton = document.getElementById('chicaneKerbMode');
+            const regButton = document.getElementById('regularKerbMode');
+            chicaneButton.style.borderWidth = '1px';
+            regButton.style.borderWidth = '5px';
+        } else if (mode === 'chicaneKerb') {
+            const chicaneButton = document.getElementById('chicaneKerbMode');
+            const regButton = document.getElementById('regularKerbMode');
+            chicaneButton.style.borderWidth = '5px';
+            regButton.style.borderWidth = '1px';
+        } else {
+            const chicaneButton = document.getElementById('chicaneKerbMode');
+            const regButton = document.getElementById('regularKerbMode');
+            chicaneButton.style.borderWidth = '1px';
+            regButton.style.borderWidth = '1px';
+        }
         // Update cursors and pointer events
         const svg = document.getElementById('trackCanvas');
         svg.style.cursor = this.getCursorForMode();
@@ -2104,7 +2120,7 @@ class HeatTrackGenerator {
             }
             i++;
         }
-        return this.visualSettings.SpeedlimitCorner === 'First' ? ret : !ret;
+        return this.visualSettings.SpeedlimitCorner === 'First' ? !ret : ret;
     }
 
     startSegmentDrag(element, x, y) {
