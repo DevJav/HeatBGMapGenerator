@@ -1611,19 +1611,16 @@ class HeatTrackGenerator {
         document.getElementById('whiteLineControls').style.display = mode === 'whiteLine' ? 'block' : 'none';
         document.getElementById('editControls').style.display = mode === 'edit' ? 'block' : 'none';
 
+        
+        const chicaneButton = document.getElementById('chicaneKerbMode');
+        const regButton = document.getElementById('regularKerbMode');
         if (mode === 'regularKerb') {
-            const chicaneButton = document.getElementById('chicaneKerbMode');
-            const regButton = document.getElementById('regularKerbMode');
             chicaneButton.style.borderWidth = '1px';
             regButton.style.borderWidth = '5px';
         } else if (mode === 'chicaneKerb') {
-            const chicaneButton = document.getElementById('chicaneKerbMode');
-            const regButton = document.getElementById('regularKerbMode');
             chicaneButton.style.borderWidth = '5px';
             regButton.style.borderWidth = '1px';
         } else {
-            const chicaneButton = document.getElementById('chicaneKerbMode');
-            const regButton = document.getElementById('regularKerbMode');
             chicaneButton.style.borderWidth = '1px';
             regButton.style.borderWidth = '1px';
         }
