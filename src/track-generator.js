@@ -24,6 +24,9 @@ class HeatTrackGenerator {
             speedLimitOffset: 230, // Distance to offset speed limits from centerline
             normalSegmentWidth: 8,
             curveSegmentWidth: 25,
+            startFinishSegmentWidth: 40,
+            gridRows: 4,
+            gridWidth: 0.7,
             borderWidth: 5,
             borderOffset: 0.9,
             centerlineWidth: 5,
@@ -33,6 +36,7 @@ class HeatTrackGenerator {
             kerbDashLength: 15,
             kerbGapLength: 10,
             whiteLineWidth: 12,
+            SpeedlimitCorner: 'First', // Distance before curve to place speed limit sign
             // Color settings
             trackFillColor: '#000000',
             trackBorderColor: '#ffffff',
@@ -44,6 +48,7 @@ class HeatTrackGenerator {
             debugTextColor: '#ff0000',
             kerbWhiteColor: '#ffffff',
             kerbRedColor: '#9f1717',
+            kerbChicaneColor: '#1e90ff'
         };
         
         // Load saved settings or use defaults
@@ -78,7 +83,10 @@ class HeatTrackGenerator {
         document.getElementById('editMode').addEventListener('click', () => this.setMode('edit'));
         document.getElementById('curveMode').addEventListener('click', () => this.setMode('curve'));
         document.getElementById('kerbMode').addEventListener('click', () => this.setMode('kerb'));
+        document.getElementById('regularKerbMode').addEventListener('click', () => this.setMode('regularKerb'));
+        document.getElementById('chicaneKerbMode').addEventListener('click', () => this.setMode('chicaneKerb'));
         document.getElementById('whiteLineMode').addEventListener('click', () => this.setMode('whiteLine'));
+        document.getElementById('startFinishMode').addEventListener('click', () => this.setMode('startFinish'));
 
         // Export buttons
         document.getElementById('exportPNG').addEventListener('click', () => this.exportTrack('png'));
@@ -110,6 +118,7 @@ class HeatTrackGenerator {
         // Visual settings listeners
         document.getElementById('segmentNumberSize').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('segmentNumberOffset').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('distanceSignSize').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('speedLimitSize').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('speedLimitOffset').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('normalSegmentWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
@@ -123,6 +132,10 @@ class HeatTrackGenerator {
         document.getElementById('kerbDashLength').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('kerbGapLength').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('whiteLineWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('SpeedlimitCorner').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('startFinishSegmentWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('gridRows').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('gridWidth').addEventListener('change', this.onVisualSettingChange.bind(this));
         
         // Color settings listeners
         document.getElementById('trackFillColor').addEventListener('change', this.onVisualSettingChange.bind(this));
@@ -134,6 +147,7 @@ class HeatTrackGenerator {
         document.getElementById('debugTextColor').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('kerbWhiteColor').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('kerbRedColor').addEventListener('change', this.onVisualSettingChange.bind(this));
+        document.getElementById('kerbChicaneColor').addEventListener('change', this.onVisualSettingChange.bind(this));
         
         // Settings buttons
         document.getElementById('saveSettings').addEventListener('click', this.saveVisualSettings.bind(this));
@@ -535,12 +549,14 @@ class HeatTrackGenerator {
                 is_curve: false,
                 speed_limit: 0,
                 has_kerb: false,
+                has_chicane_kerb: false,
                 kerb_side: 'left', // 'left', 'right', or 'both'
                 has_white_line: true,
                 white_line_side: 'right', // 'left' or 'right'
                 number_side: 'left', // 'left' or 'right' - which side to show numbers
                 speed_limit_side: 'left', // 'left' or 'right' - which side to show speed limits
-                targetCurveId: null // Will be set by calculateSpacesToNextCurve
+                targetCurveId: null, // Will be set by calculateSpacesToNextCurve
+                is_start_finish: false
             });
         }
         
@@ -690,7 +706,8 @@ class HeatTrackGenerator {
         this.renderSegmentDivisions(trackGroup);
         this.renderKerbs(trackGroup);
         this.renderWhiteLines(trackGroup);
-
+        this.renderGrid(trackGroup);
+        //TODO Render starting grid
         svg.appendChild(trackGroup);
     }
 
@@ -826,9 +843,15 @@ class HeatTrackGenerator {
         // Group contiguous kerb segments and render them as unified kerbs
         const kerbSegments = this.trackData.segments.filter(s => s.has_kerb);
         const contiguousGroups = this.groupContiguousKerbSegments(kerbSegments);
+
+        const chicaneKerbSegments = this.trackData.segments.filter(s => s.has_chicane_kerb);;
+        const chicaneContiguousGroups = this.groupContiguousKerbSegments(chicaneKerbSegments);
         
         contiguousGroups.forEach(kerbGroup => {
-            this.createUnifiedKerbForGroup(kerbGroup, group);
+            this.createUnifiedKerbForGroup(kerbGroup, group, 'regular');
+        });
+        chicaneContiguousGroups.forEach(kerbGroup => {
+            this.createUnifiedKerbForGroup(kerbGroup, group, 'chicane');
         });
     }
 
@@ -901,7 +924,7 @@ class HeatTrackGenerator {
         return false;
     }
 
-    createUnifiedKerbForGroup(kerbGroup, group) {
+    createUnifiedKerbForGroup(kerbGroup, group, kerbType) {
         // Calculate the combined boundaries of all segments in the group
         const segments = kerbGroup.segments;
         const firstSegment = segments[0];
@@ -935,7 +958,7 @@ class HeatTrackGenerator {
         
         // Create unified kerb paths for each continuous side
         sidesToRender.forEach(sideInfo => {
-            this.createUnifiedKerbPath(sideInfo.startRatio, sideInfo.endRatio, sideInfo.side, borderDistance, group, `${firstSegment.segment_number}-${sideInfo.side}`);
+            this.createUnifiedKerbPath(sideInfo.startRatio, sideInfo.endRatio, sideInfo.side, borderDistance, group, `${firstSegment.segment_number}-${sideInfo.side}`, kerbType);
         });
     }
 
@@ -1014,7 +1037,7 @@ class HeatTrackGenerator {
         return [...leftRuns, ...rightRuns];
     }
 
-    createUnifiedKerbPath(startRatio, endRatio, side, borderDistance, group, groupId) {
+    createUnifiedKerbPath(startRatio, endRatio, side, borderDistance, group, groupId, kerbType) {
         // Get the centerline segment for the unified kerb
         const centerlineStartIndex = Math.floor(startRatio * (this.trackData.centerline.length - 1));
         const centerlineEndIndex = Math.ceil(endRatio * (this.trackData.centerline.length - 1));
@@ -1031,7 +1054,7 @@ class HeatTrackGenerator {
         const kerbPoints = this.createParallelLine(centerlineSegment, kerbOffset, side);
         
         if (kerbPoints.length > 1) {
-            this.createKerbPath(kerbPoints, `unified-${side}-kerb-group-${groupId}`, group);
+            this.createKerbPath(kerbPoints, `unified-${side}-kerb-group-${groupId}`, group, kerbType);
         }
     }
 
@@ -1248,7 +1271,7 @@ class HeatTrackGenerator {
 
     createKerbHitAreas(segment, group) {
         // Only create kerb hit areas in kerb mode
-        if (this.currentMode !== 'kerb') return;
+        if (!(this.currentMode === 'regularKerb' || this.currentMode === 'chicaneKerb')) return;
         
         const segmentProgress = segment.distance || 0;
         const totalLength = this.calculateTrackLength();
@@ -1322,18 +1345,41 @@ class HeatTrackGenerator {
             if (!lineCoords) return; // Skip if calculation failed
 
             // Create visible segment line
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('x1', lineCoords.line_start[0]);
-            line.setAttribute('y1', lineCoords.line_start[1]);
-            line.setAttribute('x2', lineCoords.line_end[0]);
-            line.setAttribute('y2', lineCoords.line_end[1]);
-            line.setAttribute('stroke', 'white');
-            line.setAttribute('stroke-width', this.getSegmentStrokeWidth(segment.is_curve));
-            line.setAttribute('opacity', '1');
-            line.setAttribute('class', 'segment-line-visual');
-            line.setAttribute('data-segment-id', segment.segment_number);
-            line.style.pointerEvents = 'none';
-            group.appendChild(line);
+            if (segment.is_start_finish) {
+                // Use the across-track endpoints to position the asset
+                const p1 = lineCoords.line_start;
+                const p2 = lineCoords.line_end;
+                const angle = Math.atan2(p2[1] - p1[1], p2[0] - p1[0]) * 180 / Math.PI;
+
+                // TODO: make configurable size 
+                const imgW = this.visualSettings.startFinishSegmentWidth;
+                const imgH = imgW * 0.3;
+                const img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+                img.setAttribute('href', this.imageCache['assets/startFinish.svg'] || 'assets/startFinish.svg');
+                img.setAttribute('width', imgW);
+                img.setAttribute('height', imgH);
+                img.setAttribute('x', -imgW / 2);
+                img.setAttribute('y', -imgH / 2);
+                img.setAttribute('transform', `translate(${(p1[0] + p2[0]) / 2}, ${(p1[1] + p2[1]) / 2}) rotate(${angle})`);
+                img.setAttribute('class', 'start-finish-image');
+                img.style.pointerEvents = 'none';
+
+                group.appendChild(img);
+
+            } else {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', lineCoords.line_start[0]);
+                line.setAttribute('y1', lineCoords.line_start[1]);
+                line.setAttribute('x2', lineCoords.line_end[0]);
+                line.setAttribute('y2', lineCoords.line_end[1]);
+                line.setAttribute('stroke', 'white');
+                line.setAttribute('stroke-width', this.getSegmentStrokeWidth(segment.is_curve));
+                line.setAttribute('opacity', '1');
+                line.setAttribute('class', 'segment-line-visual');
+                line.setAttribute('data-segment-id', segment.segment_number);
+                line.style.pointerEvents = 'none';
+                group.appendChild(line);
+            }
 
             // Create invisible hit area for easier selection (for curve and edit modes)
             const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -1391,6 +1437,7 @@ class HeatTrackGenerator {
         // Calculate the position with offset from centerline
         const speedLimitInfo = this.calculateSpeedLimitPosition(segment);
         if (!speedLimitInfo) return null;
+        if (segment.has_chicane_kerb && this.drawchicaneSpeedLimit(segment)) return null;
         
         // Calculate rotation angle from direction vector
         const angle = Math.atan2(speedLimitInfo.direction[1], speedLimitInfo.direction[0]) * 180 / Math.PI;
@@ -1409,7 +1456,7 @@ class HeatTrackGenerator {
         
         // Create the speed limit sign image
         const signImage = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-    signImage.setAttribute('href', this.imageCache['assets/speed_limit_sign.png'] || 'assets/speed_limit_sign.png');
+        signImage.setAttribute('href', this.imageCache['assets/speed_limit_sign.png'] || 'assets/speed_limit_sign.png');
         signImage.setAttribute('x', -signSize / 2);
         signImage.setAttribute('y', -signSize / 2);
         signImage.setAttribute('width', signSize);
@@ -1452,7 +1499,7 @@ class HeatTrackGenerator {
         
         // Create the distance sign image
         const signImage = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-    signImage.setAttribute('href', this.imageCache['assets/distance_sign.png'] || 'assets/distance_sign.png');
+        signImage.setAttribute('href', this.imageCache['assets/distance_sign.png'] || 'assets/distance_sign.png');
         signImage.setAttribute('x', -signSize / 2);
         signImage.setAttribute('y', -signSize / 2);
         signImage.setAttribute('width', signSize);
@@ -1501,15 +1548,16 @@ class HeatTrackGenerator {
         return text;
     }
 
-    getSegmentStrokeWidth(isCurve) {
-        return isCurve ? this.visualSettings.curveSegmentWidth : this.visualSettings.normalSegmentWidth;
+    getSegmentStrokeWidth(is_curve) {
+        return is_curve ? this.visualSettings.curveSegmentWidth : this.visualSettings.normalSegmentWidth
     }
 
     getCursorForMode() {
         switch (this.currentMode) {
             case 'edit': return 'move';
             case 'curve':
-            case 'kerb':
+            case 'regularKerb':
+            case 'chicaneKerb':
             case 'whiteLine': return 'pointer';
             case 'pan': return 'grab';
             default: return 'crosshair';
@@ -1559,9 +1607,11 @@ class HeatTrackGenerator {
         
         if (e.target.type === 'color') {
             value = e.target.value; // Color inputs return hex strings
-        } else if (settingName === 'borderOffset') {
+        } else if (settingName === 'borderOffset' || settingName === 'gridWidth') {
             value = parseFloat(e.target.value);
-        } else {
+        } else if (settingName === 'SpeedlimitCorner') {
+            value = e.target.value;
+        }else {
             value = parseInt(e.target.value);
         }
         
@@ -1590,10 +1640,23 @@ class HeatTrackGenerator {
         
         // Show/hide controls
         document.getElementById('curveControls').style.display = mode === 'curve' ? 'block' : 'none';
-        document.getElementById('kerbControls').style.display = mode === 'kerb' ? 'block' : 'none';
+        document.getElementById('kerbControls').style.display = (mode === 'kerb' || mode === 'regularKerb' || mode === 'chicaneKerb') ? 'block' : 'none';
         document.getElementById('whiteLineControls').style.display = mode === 'whiteLine' ? 'block' : 'none';
         document.getElementById('editControls').style.display = mode === 'edit' ? 'block' : 'none';
+        document.getElementById('startFinishControls').style.display = mode === 'startFinish' ? 'block' : 'none';
         
+        const chicaneButton = document.getElementById('chicaneKerbMode');
+        const regButton = document.getElementById('regularKerbMode');
+        if (mode === 'regularKerb') {
+            chicaneButton.style.borderWidth = '1px';
+            regButton.style.borderWidth = '5px';
+        } else if (mode === 'chicaneKerb') {
+            chicaneButton.style.borderWidth = '5px';
+            regButton.style.borderWidth = '1px';
+        } else {
+            chicaneButton.style.borderWidth = '1px';
+            regButton.style.borderWidth = '1px';
+        }
         // Update cursors and pointer events
         const svg = document.getElementById('trackCanvas');
         svg.style.cursor = this.getCursorForMode();
@@ -1666,9 +1729,14 @@ class HeatTrackGenerator {
                 this.handleSpeedLimitSideToggle(element);
                 handledByMode = true;
             }
-        } else if (this.currentMode === 'kerb') {
+        } else if (this.currentMode === 'regularKerb') {
             if (element.classList.contains('kerb-hit-area')) {
-                this.handleKerbAreaSelection(element);
+                this.handleKerbAreaSelection(element, 'regular');
+                handledByMode = true;
+            }
+        } else if (this.currentMode === 'chicaneKerb') {
+            if (element.classList.contains('kerb-hit-area')) {
+                this.handleKerbAreaSelection(element, 'chicane');
                 handledByMode = true;
             }
         } else if (this.currentMode === 'whiteLine') {
@@ -1681,6 +1749,11 @@ class HeatTrackGenerator {
                 element.classList.contains('distance-sign') || element.classList.contains('distance-sign-number') || 
                 element.classList.contains('distance-sign-image')) {
                 this.startSegmentDrag(element, x, y);
+                handledByMode = true;
+            }
+        } else if (this.currentMode === 'startFinish') {
+            if (element.classList.contains('segment-line')) {
+                this.handleStartFinishSelection(element);
                 handledByMode = true;
             }
         }
@@ -1828,31 +1901,68 @@ class HeatTrackGenerator {
         return parsedSpeed;
     }
 
-    handleKerbAreaSelection(element) {
+    handleKerbAreaSelection(element, type) {
         const segmentId = parseInt(element.getAttribute('data-segment-id'));
         const clickedSide = element.getAttribute('data-kerb-side');
         const segment = this.trackData.segments.find(s => s.segment_number === segmentId);
         if (!segment) return;
         
         // Toggle kerb on the clicked side
-        if (!segment.has_kerb) {
+        if (!segment.has_kerb && !segment.has_chicane_kerb) {
             // No kerbs yet, add kerb to clicked side
-            segment.has_kerb = true;
+             if (type === 'regular') {
+                segment.has_kerb = true;
+             } else if (type === 'chicane') {
+                segment.has_chicane_kerb = true;
+             }
             segment.kerb_side = clickedSide;
             this.showStatus(`Segment ${segmentId} kerb added (${clickedSide} side)`, 'success');
         } else {
             // Already has kerbs, check current configuration
             if (segment.kerb_side === clickedSide) {
                 // Clicking the same side that already has kerbs - remove them
-                segment.has_kerb = false;
-                segment.kerb_side = 'both';
-                this.showStatus(`Segment ${segmentId} kerb removed`, 'success');
+                if (type === 'regular' && segment.has_kerb) {
+                    segment.has_kerb = false;
+                    segment.kerb_side = 'both';
+                    this.showStatus(`Segment ${segmentId} kerb removed`, 'success');
+                } else if (type === 'regular' && segment.has_chicane_kerb) {
+                    segment.has_chicane_kerb = false;
+                    segment.has_kerb = true;
+                    segment.kerb_side = clickedSide;
+                    this.showStatus(`Segment ${segmentId} kerb type changed`, 'success');
+                } else if (type === 'chicane' && segment.has_kerb) {
+                    segment.has_kerb = false;
+                    segment.has_chicane_kerb = true;
+                    segment.kerb_side = clickedSide;
+                    this.showStatus(`Segment ${segmentId} kerb type changed`, 'success');
+                } else if (type === 'chicane' && segment.has_chicane_kerb) {
+                    segment.has_chicane_kerb = false;
+                    this.showStatus(`Segment ${segmentId} chicane kerb removed`, 'success');
+                    segment.kerb_side = 'both';
+                }
             } else if (segment.kerb_side === 'both') {
                 // Has kerbs on both sides, switch to only the clicked side
                 segment.kerb_side = clickedSide;
-                this.showStatus(`Segment ${segmentId} kerb: ${clickedSide} side only`, 'success');
+                if ((type === 'regular' && segment.has_kerb || type === 'chicane' && segment.has_chicane_kerb)) {
+                    this.showStatus(`Segment ${segmentId} kerb: ${clickedSide} side only`, 'success');
+                } else if (type === 'regular' && segment.has_chicane_kerb) {
+                    segment.has_kerb = true;
+                    segment.has_chicane_kerb = false;
+                    this.showStatus(`Segment ${segmentId} kerb: ${clickedSide} side only`, 'success');
+                } else if (type === 'chicane' && segment.has_kerb) {
+                    segment.has_kerb = false;
+                    segment.has_chicane_kerb = true;
+                    this.showStatus(`Segment ${segmentId} kerb: ${clickedSide} side only`, 'success');
+                }
             } else {
                 // Has kerbs on opposite side, add to both sides
+                if (type === 'regular') {
+                    segment.has_kerb = true;
+                    segment.has_chicane_kerb = false;
+                } else if (type === 'chicane') {
+                    segment.has_kerb = false;
+                    segment.has_chicane_kerb = true;
+                }
                 segment.kerb_side = 'both';
                 this.showStatus(`Segment ${segmentId} kerbs: both sides`, 'success');
             }
@@ -2032,6 +2142,20 @@ class HeatTrackGenerator {
                 if (speedSignGroup) speedSignGroup.remove();
             }
         }
+    }
+
+    drawchicaneSpeedLimit(segment) {
+        // This function can be implemented to draw speed limits specific to chicane kerbs if needed
+        const segmentId = segment.segment_number;
+        let i = 0
+        let ret = false
+        while (this.trackData.segments[segmentId + i].has_chicane_kerb) {
+            if (this.trackData.segments[segmentId + i].is_curve) {
+                ret = true
+            }
+            i++;
+        }
+        return this.visualSettings.SpeedlimitCorner === 'First' ? !ret : ret;
     }
 
     startSegmentDrag(element, x, y) {
@@ -2582,16 +2706,17 @@ class HeatTrackGenerator {
         // Calculate border distance for white track borders
         const borderDistance = (this.trackData.track_width / 2) * this.visualSettings.borderOffset;
         
+        const kerbType = segment.has_chicane_kerb ? 'chicane' : 'regular';
         // Create kerb paths that start at the white border and extend outward
         if (segment.kerb_side === 'left' || segment.kerb_side === 'both') {
-            this.createKerbPathAtBorder(segment, 'left', borderDistance, group);
+            this.createKerbPathAtBorder(segment, 'left', borderDistance, group, kerbType);
         }
         if (segment.kerb_side === 'right' || segment.kerb_side === 'both') {
-            this.createKerbPathAtBorder(segment, 'right', borderDistance, group);
+            this.createKerbPathAtBorder(segment, 'right', borderDistance, group, kerbType);
         }
     }
 
-    createKerbPathAtBorder(segment, side, borderDistance, group) {
+    createKerbPathAtBorder(segment, side, borderDistance, group, kerbType) {
         const segmentProgress = segment.distance || 0;
         const totalLength = this.calculateTrackLength();
         
@@ -2627,7 +2752,7 @@ class HeatTrackGenerator {
         ), kerbOffset, side);
         
         if (kerbPoints.length > 1) {
-            this.createKerbPath(kerbPoints, `${side}-kerb-${segment.segment_number}`, group);
+            this.createKerbPath(kerbPoints, `${side}-kerb-${segment.segment_number}`, group, kerbType);
         }
     }
 
@@ -2637,7 +2762,7 @@ class HeatTrackGenerator {
         return borderPoints.slice(startIndex, endIndex + 1);
     }
 
-    createKerbPath(points, id, group) {
+    createKerbPath(points, id, group, kerbType) {
         if (points.length < 2) return;
         
         const pathData = points.map((point, index) => 
@@ -2656,12 +2781,47 @@ class HeatTrackGenerator {
         // Create red striped pattern on top
         const redKerbPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         redKerbPath.setAttribute('d', pathData);
-        redKerbPath.setAttribute('stroke', this.visualSettings.kerbRedColor);
+        if (kerbType === 'regular') {
+            redKerbPath.setAttribute('stroke', this.visualSettings.kerbRedColor);
+        } else if (kerbType === 'chicane') {
+            // Different color or style for chicane kerbs if needed
+            redKerbPath.setAttribute('stroke', this.visualSettings.kerbChicaneColor);
+        }
         redKerbPath.setAttribute('stroke-width', this.visualSettings.kerbWidth);
         redKerbPath.setAttribute('stroke-dasharray', `${this.visualSettings.kerbDashLength} ${this.visualSettings.kerbGapLength}`);
         redKerbPath.setAttribute('fill', 'none');
         redKerbPath.style.pointerEvents = 'none';
         group.appendChild(redKerbPath);
+    }
+
+    handleStartFinishSelection(element) {
+        const segmentId = parseInt(element.getAttribute('data-segment-id'));
+        const segment = this.trackData.segments.find(s => s.segment_number === segmentId);
+        if (!segment) return;
+
+        if (segment.is_curve) {
+            this.showStatus('Start/Finish line cannot be placed on curves', 'error');
+            return;
+        } else if (false) {
+        // Prevent placement if there is not enough space for a proper start/finish line
+            this.showStatus('Not enough space to place Start/Finish line here', 'error');
+            return;
+        }
+        // If there is already a start/finish line, remove it
+        const existingLineSegment = this.trackData.segments.find(s => s.is_start_finish);
+        if (existingLineSegment) {
+            existingLineSegment.is_start_finish = false;
+        }
+        segment.is_start_finish = true;
+        
+        // Re-render the track to update all segment displays
+        this.renderTrack(true); // preserve view
+        
+        // Save session after start/finish changes
+        this.saveSession();
+        
+        this.showStatus(`Segment ${segmentId} ${segment.is_start_finish ? 'marked as start/finish' : 'unmarked as start/finish'}`, 'success');
+        
     }
 
     calculateTrackLength() {
@@ -2676,6 +2836,37 @@ class HeatTrackGenerator {
             length += Math.sqrt(dx * dx + dy * dy);
         }
         return length;
+    }
+
+    //Redering of the Grid
+    renderGrid(group) {
+        const startFinishSegmentIndex = this.trackData.segments.findIndex(s => s.is_start_finish === true);
+        for (let i = startFinishSegmentIndex; i > startFinishSegmentIndex - this.visualSettings.gridRows; i--) {
+                const segment = this.trackData.segments[i];
+                if (!segment) continue;
+
+                const lineCoords = this.calculateSegmentLineCoordinates(segment);
+                if (!lineCoords) return; // Skip if calculation failed
+                const p1 = lineCoords.line_start;
+                const p2 = lineCoords.line_end;
+                const angle = Math.atan2(p2[1] - p1[1], p2[0] - p1[0]) * 180 / Math.PI;
+
+                // TODO: make configurable size 
+                const imgW = this.trackData.track_width * this.visualSettings.gridWidth;
+                const imgH = 60;
+                const img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+                img.setAttribute('href', this.imageCache['assets/gridMarker.svg'] || 'assets/gridMarker.svg');
+                img.setAttribute('width', imgW);
+                img.setAttribute('height', imgH);
+                img.setAttribute('x', -imgW / 2);
+                img.setAttribute('y', -imgH / 2);
+                img.setAttribute('transform', `translate(${(p1[0] + p2[0]) / 2}, ${(p1[1] + p2[1]) / 2}) rotate(${angle})`);
+                img.setAttribute('class', 'grid-marker-image');
+                img.style.pointerEvents = 'none';
+
+                group.appendChild(img);
+            
+        }
     }
 
     // Export methods
