@@ -694,7 +694,7 @@ class HeatTrackGenerator {
         this.renderSegmentDivisions(trackGroup);
         this.renderKerbs(trackGroup);
         this.renderWhiteLines(trackGroup);
-
+        //TODO Render starting grid
         svg.appendChild(trackGroup);
     }
 
@@ -1332,9 +1332,9 @@ class HeatTrackGenerator {
                 const p2 = lineCoords.line_end;
                 const angle = Math.atan2(p2[1] - p1[1], p2[0] - p1[0]) * 180 / Math.PI;
 
-                // TODO: make configurable size
-                const imgW = 40
-                const imgH = parseFloat(this.trackData.segment_length * 0.70)
+                // TODO: make configurable size 
+                const imgW = 40;
+                const imgH = parseFloat(this.trackData.segment_length * 0.70);
                 const img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
                 img.setAttribute('href', this.imageCache['assets/startFinish.svg'] || 'assets/startFinish.svg');
                 img.setAttribute('width', imgW);
@@ -1354,7 +1354,7 @@ class HeatTrackGenerator {
                 line.setAttribute('x2', lineCoords.line_end[0]);
                 line.setAttribute('y2', lineCoords.line_end[1]);
                 line.setAttribute('stroke', 'white');
-                line.setAttribute('stroke-width', this.getSegmentStrokeWidth(segment.isCurve));
+                line.setAttribute('stroke-width', this.getSegmentStrokeWidth(segment.is_curve));
                 line.setAttribute('opacity', '1');
                 line.setAttribute('class', 'segment-line-visual');
                 line.setAttribute('data-segment-id', segment.segment_number);
@@ -1528,8 +1528,8 @@ class HeatTrackGenerator {
         return text;
     }
 
-    getSegmentStrokeWidth(isCurve) {
-        return isCurve ? this.visualSettings.curveSegmentWidth : this.visualSettings.normalSegmentWidth
+    getSegmentStrokeWidth(is_curve) {
+        return is_curve ? this.visualSettings.curveSegmentWidth : this.visualSettings.normalSegmentWidth
     }
 
     getCursorForMode() {
