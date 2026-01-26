@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="50mm"
+   height="20mm"
+   viewBox="0 0 50 20"
+   version="1.1"
+   id="svg1"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1" />
+  <g
+     id="layer1">
+    <rect
+       style="fill:#1a1a1a;stroke:#000000;stroke-width:0;stroke-dasharray:none"
+       id="rect2"
+       width="10"
+       height="10"
+       x="-1.3877788e-17"
+       y="-4.3341831e-08" />
+    <rect
+       style="fill:#1a1a1a;stroke:#000000;stroke-width:0;stroke-dasharray:none"
+       id="rect2-2"
+       width="10"
+       height="10"
+       x="10"
+       y="10" />
+    <rect
+       style="fill:#1a1a1a;stroke:#000000;stroke-width:0;stroke-dasharray:none"
+       id="rect2-2-2"
+       width="10"
+       height="10"
+       x="20"
+       y="0" />
+    <rect
+       style="fill:#1a1a1a;stroke:#000000;stroke-width:0;stroke-dasharray:none"
+       id="rect2-2-6"
+       width="10"
+       height="10"
+       x="30"
+       y="10" />
+    <rect
+       style="fill:#1a1a1a;stroke:#000000;stroke-width:0;stroke-dasharray:none"
+       id="rect2-2-1"
+       width="10"
+       height="10"
+       x="40"
+       y="0" />
+  </g>
+  <g
+     id="layer1-4"
+     transform="rotate(180,25,10)"
+     style="fill:#ffffff">
+    <rect
+       style="fill:#ffffff;stroke:#000000;stroke-width:0;stroke-dasharray:none"
+       id="rect2-1"
+       width="10"
+       height="10"
+       x="-1.3877788e-17"
+       y="-4.3341831e-08" />
+    <rect
+       style="fill:#ffffff;stroke:#000000;stroke-width:0;stroke-dasharray:none"
+       id="rect2-2-13"
+       width="10"
+       height="10"
+       x="10"
+       y="10" />
+    <rect
+       style="fill:#ffffff;stroke:#000000;stroke-width:0;stroke-dasharray:none"
+       id="rect2-2-2-8"
+       width="10"
+       height="10"
+       x="20"
+       y="0" />
+    <rect
+       style="fill:#ffffff;stroke:#000000;stroke-width:0;stroke-dasharray:none"
+       id="rect2-2-6-7"
+       width="10"
+       height="10"
+       x="30"
+       y="10" />
+    <rect
+       style="fill:#ffffff;stroke:#000000;stroke-width:0;stroke-dasharray:none"
+       id="rect2-2-1-4"
+       width="10"
+       height="10"
+       x="40"
+       y="0" />
+  </g>
+</svg>
