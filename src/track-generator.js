@@ -41,23 +41,22 @@ class HeatTrackGenerator {
             previewCenterlineColor: '#fb0000',
             segmentNumberColor: '#ffffff',
             speedLimitColor: '#ffff00',
-            debugTextColor: '#ff0000',
             kerbWhiteColor: '#ffffff',
             kerbRedColor: '#9f1717',
         };
-        
+
         // Load saved settings or use defaults
         this.visualSettings = this.loadVisualSettings();
-        
+
         // Image cache for base64 data URIs
         this.imageCache = {};
-        this.loadImagesAsDataURI();
-        
+
         this.initializeEventListeners();
         this.setupSVGInteraction();
-        
-        // Try to restore previous session
-        this.restoreSession();
+
+        // Restore the previous session once the sign images are embedded, so the
+        // first render (and any immediate export) already uses the data URIs
+        this.loadImagesAsDataURI().then(() => this.restoreSession());
     }
 
     initializeEventListeners() {
@@ -131,7 +130,6 @@ class HeatTrackGenerator {
         document.getElementById('whiteLineColor').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('segmentNumberColor').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('speedLimitColor').addEventListener('change', this.onVisualSettingChange.bind(this));
-        document.getElementById('debugTextColor').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('kerbWhiteColor').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('kerbRedColor').addEventListener('change', this.onVisualSettingChange.bind(this));
         
@@ -139,41 +137,64 @@ class HeatTrackGenerator {
         document.getElementById('saveSettings').addEventListener('click', this.saveVisualSettings.bind(this));
         document.getElementById('loadSettings').addEventListener('click', this.loadAndApplySettings.bind(this));
         document.getElementById('resetSettings').addEventListener('click', this.resetToDefaultSettings.bind(this));
-        
-        // Debug button
-        document.getElementById('clearDebugBtn').addEventListener('click', this.clearDebugPoints.bind(this));
     }
 
     // Load images as base64 data URIs for SVG export compatibility
     async loadImagesAsDataURI() {
-    const imagePaths = ['assets/speed_limit_sign.png', 'assets/distance_sign.png'];
-        
-        for (const imagePath of imagePaths) {
+        const imagePaths = ['assets/speed_limit_sign.png', 'assets/distance_sign.png'];
+
+        await Promise.all(imagePaths.map(async imagePath => {
             try {
                 const response = await fetch(imagePath);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const blob = await response.blob();
-                const reader = new FileReader();
-                
-                reader.onload = () => {
-                    this.imageCache[imagePath] = reader.result;
-                };
-                
-                reader.readAsDataURL(blob);
+                this.imageCache[imagePath] = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = () => reject(reader.error);
+                    reader.readAsDataURL(blob);
+                });
             } catch (error) {
+                // Happens when index.html is opened from disk (file://); exports will lack the sign images
                 console.warn(`Failed to load image ${imagePath}:`, error);
-                // Fallback to original path if base64 loading fails
                 this.imageCache[imagePath] = imagePath;
             }
-        }
+        }));
     }
 
     setupSVGInteraction() {
         const svg = document.getElementById('trackCanvas');
-        
-        svg.addEventListener('mousedown', this.handleMouseDown.bind(this));
-        svg.addEventListener('mousemove', this.handleMouseMove.bind(this));
-        svg.addEventListener('mouseup', this.handleMouseUp.bind(this));
-        svg.addEventListener('wheel', this.handleWheel.bind(this));
+
+        // Pointer events cover mouse, touch and pen; pointercancel ends a drag cleanly
+        svg.addEventListener('pointerdown', this.handleMouseDown.bind(this));
+        svg.addEventListener('pointermove', this.handleMouseMove.bind(this));
+        svg.addEventListener('pointerup', this.handleMouseUp.bind(this));
+        svg.addEventListener('pointercancel', this.handleMouseUp.bind(this));
+        svg.addEventListener('wheel', this.handleWheel.bind(this), { passive: false });
+    }
+
+    // Convert a pointer event's client position to viewBox coordinates
+    // (accounts for the canvas being letterboxed by preserveAspectRatio)
+    clientToViewBox(e) {
+        const svg = document.getElementById('trackCanvas');
+        const point = new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.getScreenCTM().inverse());
+        return { x: point.x, y: point.y };
+    }
+
+    // Convert viewBox coordinates to track coordinates (undo the pan/zoom transform)
+    viewBoxToTrack(x, y) {
+        return { x: (x - this.panX) / this.scale, y: (y - this.panY) / this.scale };
+    }
+
+    applyViewTransform() {
+        const trackGroup = document.querySelector('#trackCanvas #trackGroup');
+        if (trackGroup) {
+            trackGroup.setAttribute('transform', `translate(${this.panX}, ${this.panY}) scale(${this.scale})`);
+        }
+        const zoomLevel = document.getElementById('zoomLevel');
+        if (zoomLevel && this.fitScale) {
+            zoomLevel.textContent = `Zoom: ${Math.round(this.scale / this.fitScale * 100)}%`;
+        }
     }
 
     handleDragOver(e) {
@@ -237,23 +258,51 @@ class HeatTrackGenerator {
 
         // Use the first path as the centerline
         const path = paths[0];
-        const pathLength = path.getTotalLength();
-        
+        const transform = this.getAccumulatedTransform(path);
+
+        // Measure a copy inside the live document: getTotalLength() isn't reliable on
+        // elements of a parsed, unrendered document in every browser
+        const measureSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        measureSvg.style.cssText = 'position:absolute;width:0;height:0;visibility:hidden';
+        const livePath = document.importNode(path, true);
+        livePath.removeAttribute('transform');
+        measureSvg.appendChild(livePath);
+        document.body.appendChild(measureSvg);
+
         // Sample points along the path
         const points = [];
         const numSamples = 1000; // TODO: Configurable parameter
-        
-        for (let i = 0; i <= numSamples; i++) {
-            const distance = (i / numSamples) * pathLength;
-            const point = path.getPointAtLength(distance);
-            points.push([point.x, point.y]);
+
+        try {
+            const pathLength = livePath.getTotalLength();
+            for (let i = 0; i <= numSamples; i++) {
+                const distance = (i / numSamples) * pathLength;
+                const { x, y } = livePath.getPointAtLength(distance);
+                const point = new DOMPoint(x, y).matrixTransform(transform);
+                points.push([point.x, point.y]);
+            }
+        } finally {
+            measureSvg.remove();
         }
-        
+
         this.centerlinePoints = points;
+        // A new centerline invalidates any previously generated track
+        this.trackData = null;
         console.log(`Extracted ${points.length} centerline points`);
-        
+
         // Show preview of the loaded centerline
         this.showCenterlinePreview();
+        this.saveSession();
+    }
+
+    // Combine the transforms of the path and its ancestor groups (up to the root <svg>)
+    getAccumulatedTransform(element) {
+        let matrix = new DOMMatrix();
+        for (let el = element; el && el.localName !== 'svg'; el = el.parentElement) {
+            const local = el.transform && el.transform.baseVal.consolidate();
+            if (local) matrix = DOMMatrix.fromMatrix(local.matrix).multiply(matrix);
+        }
+        return matrix;
     }
 
     showCenterlinePreview() {
@@ -281,41 +330,37 @@ class HeatTrackGenerator {
         centerPath.setAttribute('stroke-width', '25');
         centerPath.setAttribute('fill', 'none');
         previewGroup.appendChild(centerPath);
-        
+
         svg.appendChild(previewGroup);
-        
-        // Save session after loading centerline
-        this.saveSession();
     }
 
     autoScaleAndCenterPreview(previewGroup) {
-        const bounds = this.calculateCenterlineBounds();
-        
+        this.fitToBounds(this.calculatePointBounds(this.centerlinePoints), previewGroup);
+    }
+
+    calculatePointBounds(points) {
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const [x, y] of points) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+        }
+        return { minX, maxX, minY, maxY };
+    }
+
+    // Scale and center the given bounds inside the viewBox
+    fitToBounds(bounds, group) {
         const scaleX = this.viewBoxWidth / (bounds.maxX - bounds.minX + 100);
         const scaleY = this.viewBoxHeight / (bounds.maxY - bounds.minY + 100);
         this.scale = Math.min(scaleX, scaleY, 2);
-        
+        this.fitScale = this.scale;
+
         this.panX = (this.viewBoxWidth - (bounds.maxX - bounds.minX) * this.scale) / 2 - bounds.minX * this.scale;
         this.panY = (this.viewBoxHeight - (bounds.maxY - bounds.minY) * this.scale) / 2 - bounds.minY * this.scale;
-        
-        previewGroup.setAttribute('transform', `translate(${this.panX}, ${this.panY}) scale(${this.scale})`);
-    }
 
-    calculateCenterlineBounds() {
-        if (!this.centerlinePoints || this.centerlinePoints.length === 0) {
-            return { minX: 0, maxX: 100, minY: 0, maxY: 100, centerX: 50, centerY: 50 };
-        }
-
-        const minX = Math.min(...this.centerlinePoints.map(p => p[0]));
-        const maxX = Math.max(...this.centerlinePoints.map(p => p[0]));
-        const minY = Math.min(...this.centerlinePoints.map(p => p[1]));
-        const maxY = Math.max(...this.centerlinePoints.map(p => p[1]));
-
-        return {
-            minX, maxX, minY, maxY,
-            centerX: (minX + maxX) / 2,
-            centerY: (minY + maxY) / 2
-        };
+        group.setAttribute('transform', `translate(${this.panX}, ${this.panY}) scale(${this.scale})`);
+        this.applyViewTransform();
     }
 
     generateTrack() {
@@ -334,7 +379,7 @@ class HeatTrackGenerator {
             this.generateTrackBorders(trackWidth);
             
             // Divide track into segments
-            this.divideTrackIntoSegments(segmentLength, trackWidth);
+            this.divideTrackIntoSegments(segmentLength);
             
             // Calculate spaces to next curve for each segment
             this.calculateSpacesToNextCurve();
@@ -429,41 +474,20 @@ class HeatTrackGenerator {
         return length > 0 ? [vector[0] / length, vector[1] / length] : [0, 0];
     }
 
-    divideTrackIntoSegments(segmentLength, trackWidth = null) {
-        // Constants
-        const MIN_SEGMENT_DISTANCE_RATIO = 0.5; // Minimum distance as ratio of segment length
-        const EPSILON = 1e-10; // Small value to prevent division by zero
+    divideTrackIntoSegments(segmentLength) {
+        // A track whose ends are closer than this (as a ratio of segment length) is treated as a closed loop
+        const CLOSED_TRACK_DISTANCE_RATIO = 0.5;
         
         // Input validation
         if (!this.centerlinePoints || this.centerlinePoints.length < 2) {
             throw new Error('Invalid centerline points: Need at least 2 points');
         }
         
-        if (segmentLength <= 0) {
+        if (!(segmentLength > 0)) {
             throw new Error('Segment length must be positive');
         }
         
-        // Get track width from parameter or DOM fallback
-        const halfWidth = trackWidth ? 
-            trackWidth / 2 : 
-            parseFloat(document.getElementById('trackWidth').value) / 2;
-        
-        if (halfWidth <= 0) {
-            throw new Error('Track width must be positive');
-        }
-        
-        // Calculate cumulative distances along centerline
-        const distances = [0];
-        for (let i = 1; i < this.centerlinePoints.length; i++) {
-            const prev = this.centerlinePoints[i - 1];
-            const curr = this.centerlinePoints[i];
-            const dist = Math.sqrt(
-                Math.pow(curr[0] - prev[0], 2) + Math.pow(curr[1] - prev[1], 2)
-            );
-            distances.push(distances[distances.length - 1] + dist);
-        }
-        
-        const totalLength = distances[distances.length - 1];
+        const totalLength = this.calculateTrackLength();
         
         // Check if track is long enough for segments
         if (totalLength < segmentLength) {
@@ -472,66 +496,34 @@ class HeatTrackGenerator {
             return;
         }
         
-        const numSegments = Math.floor(totalLength / segmentLength);
+        const first = this.centerlinePoints[0];
+        const last = this.centerlinePoints[this.centerlinePoints.length - 1];
+        const isClosed = Math.hypot(last[0] - first[0], last[1] - first[1]) < segmentLength * CLOSED_TRACK_DISTANCE_RATIO;
         
-        console.log(`Track length: ${totalLength.toFixed(2)} units`);
-        console.log(`Creating ${numSegments} segments of ${segmentLength} units each`);
+        // On a closed loop, stretch the spacing slightly so every space has the same length;
+        // on an open track keep the exact length and let the last space take the remainder
+        let segmentCount, spacing;
+        if (isClosed) {
+            segmentCount = Math.max(1, Math.round(totalLength / segmentLength));
+            spacing = totalLength / segmentCount;
+        } else {
+            segmentCount = Math.floor(totalLength / segmentLength) + 1;
+            spacing = segmentLength;
+        }
         
-        // Find points at segment boundaries using optimized search
+        console.log(`Track length: ${totalLength.toFixed(2)} units (${isClosed ? 'closed' : 'open'})`);
+        console.log(`Creating ${segmentCount} segments of ${spacing.toFixed(2)} units each`);
+        
         const segmentDivisions = [];
-        let distanceIndex = 0; // Performance optimization: maintain search pointer
-        
-        for (let i = 0; i <= numSegments; i++) {
-            const targetDistance = i * segmentLength;
-            
-            // Advance pointer to correct position (optimization)
-            while (distanceIndex < distances.length - 1 && 
-                   distances[distanceIndex + 1] < targetDistance) {
-                distanceIndex++;
-            }
-            
-            // Ensure we're within bounds
-            if (distanceIndex >= distances.length - 1) {
-                console.warn(`Reached end of centerline at segment ${i}`);
-                break;
-            }
-            
-            // Safety check for division by zero
-            const segmentDistance = distances[distanceIndex + 1] - distances[distanceIndex];
-            if (segmentDistance < EPSILON) {
-                console.warn(`Zero distance between points ${distanceIndex} and ${distanceIndex + 1}, skipping`);
-                continue;
-            }
-            
-            // Interpolate between points
-            const t = (targetDistance - distances[distanceIndex]) / segmentDistance;
-            
-            // Clamp t to [0, 1] range for safety
-            const clampedT = Math.max(0, Math.min(1, t));
-            
-            const p1 = this.centerlinePoints[distanceIndex];
-            const p2 = this.centerlinePoints[distanceIndex + 1];
-            
-            // Interpolated point on centerline
-            const centerPoint = [
-                p1[0] + clampedT * (p2[0] - p1[0]),
-                p1[1] + clampedT * (p2[1] - p1[1])
-            ];
-            
-            // Calculate direction for perpendicular
-            const direction = this.normalize([p2[0] - p1[0], p2[1] - p1[1]]);
-            
-            // Handle case where direction is zero (duplicate points)
-            if (direction[0] === 0 && direction[1] === 0) {
-                console.warn(`Zero direction vector at segment ${i}, using default direction`);
-                direction[0] = 1; // Default to horizontal direction
-            }
+        for (let i = 0; i < segmentCount; i++) {
+            const distance = Math.min(i * spacing, totalLength);
+            const { index, t } = this.locateDistance(distance);
             
             segmentDivisions.push({
                 segment_number: i + 1,
-                centerline_index: distanceIndex,
-                interpolation_t: clampedT,
-                distance: targetDistance,
+                centerline_index: index,
+                interpolation_t: t,
+                distance: distance,
                 is_curve: false,
                 speed_limit: 0,
                 has_kerb: false,
@@ -544,41 +536,48 @@ class HeatTrackGenerator {
             });
         }
         
-        // Check for closed track and remove last segment if too close to first
-        if (segmentDivisions.length > 1) {
-            const first = segmentDivisions[0];
-            const last = segmentDivisions[segmentDivisions.length - 1];
-            
-            // Calculate center points for distance comparison
-            const firstCenterPoint = this.interpolatePointOnCenterline(first.centerline_index, first.interpolation_t);
-            const lastCenterPoint = this.interpolatePointOnCenterline(last.centerline_index, last.interpolation_t);
-            
-            if (firstCenterPoint && lastCenterPoint) {
-                const distanceToFirst = Math.sqrt(
-                    Math.pow(lastCenterPoint[0] - firstCenterPoint[0], 2) +
-                    Math.pow(lastCenterPoint[1] - firstCenterPoint[1], 2)
-                );
-                
-                const minDistance = segmentLength * MIN_SEGMENT_DISTANCE_RATIO;
-                if (distanceToFirst < minDistance) {
-                    segmentDivisions.pop();
-                    console.log(`Removed last segment due to insufficient distance (${distanceToFirst.toFixed(2)}) to first segment`);
-                }
-            }
-        }
-        
-        // Re-number segments to ensure continuous numbering
-        segmentDivisions.forEach((segment, index) => {
-            segment.segment_number = index + 1;
-        });
-        
         this.segmentDivisions = segmentDivisions;
         console.log(`Created ${segmentDivisions.length} segment divisions`);
-        
-        // Validate result
-        if (segmentDivisions.length === 0) {
-            console.warn('No segments were created - check input parameters');
+    }
+
+    // Cumulative distance along the centerline at each point (cached per centerline array)
+    getCumulativeDistances() {
+        const points = this.centerlinePoints;
+        if (!points) return [0];
+        if (this.distanceCache && this.distanceCache.points === points) {
+            return this.distanceCache.distances;
         }
+        
+        const distances = [0];
+        for (let i = 1; i < points.length; i++) {
+            const prev = points[i - 1];
+            const curr = points[i];
+            distances.push(distances[i - 1] + Math.hypot(curr[0] - prev[0], curr[1] - prev[1]));
+        }
+        this.distanceCache = { points, distances };
+        return distances;
+    }
+
+    // Find the centerline segment index and interpolation factor for a distance along the track
+    locateDistance(distance) {
+        const distances = this.getCumulativeDistances();
+        let low = 0;
+        let high = distances.length - 2;
+        while (low < high) {
+            const mid = (low + high + 1) >> 1;
+            if (distances[mid] <= distance) low = mid;
+            else high = mid - 1;
+        }
+        const span = distances[low + 1] - distances[low];
+        const t = span > 0 ? Math.min(Math.max((distance - distances[low]) / span, 0), 1) : 0;
+        return { index: low, t };
+    }
+
+    // Distance where a segment ends: the next segment's line, or the end of the track for the last one
+    getSegmentEndDistance(segment) {
+        const segments = this.trackData.segments;
+        const index = segments.indexOf(segment);
+        return index >= 0 && index < segments.length - 1 ? segments[index + 1].distance : this.calculateTrackLength();
     }
 
     // Calculate spaces to next curve for each segment
@@ -673,7 +672,9 @@ class HeatTrackGenerator {
         // Create main group
         const trackGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         trackGroup.id = 'trackGroup';
-        
+        // Set explicitly so exported files don't fall back to a serif font
+        trackGroup.setAttribute('font-family', "Inter, 'Segoe UI', Arial, sans-serif");
+
         // Apply transform based on preserveView flag
         if (preserveView && currentTransform) {
             // Preserve the existing view
@@ -695,31 +696,10 @@ class HeatTrackGenerator {
     }
 
     autoScaleAndCenter(trackGroup) {
-        const bounds = this.calculateBounds();
-        
-        const scaleX = this.viewBoxWidth / (bounds.maxX - bounds.minX + 100);
-        const scaleY = this.viewBoxHeight / (bounds.maxY - bounds.minY + 100);
-        this.scale = Math.min(scaleX, scaleY, 2);
-        
-        this.panX = (this.viewBoxWidth - (bounds.maxX - bounds.minX) * this.scale) / 2 - bounds.minX * this.scale;
-        this.panY = (this.viewBoxHeight - (bounds.maxY - bounds.minY) * this.scale) / 2 - bounds.minY * this.scale;
-        
-        trackGroup.setAttribute('transform', `translate(${this.panX}, ${this.panY}) scale(${this.scale})`);
-    }
-
-    calculateBounds() {
-        const allPoints = [
-            ...this.trackData.centerline,
+        this.fitToBounds(this.calculatePointBounds([
             ...this.trackData.left_border,
             ...this.trackData.right_border
-        ];
-
-        return {
-            minX: Math.min(...allPoints.map(p => p[0])),
-            maxX: Math.max(...allPoints.map(p => p[0])),
-            minY: Math.min(...allPoints.map(p => p[1])),
-            maxY: Math.max(...allPoints.map(p => p[1]))
-        };
+        ]), trackGroup);
     }
 
     renderTrackFill(group) {
@@ -747,30 +727,25 @@ class HeatTrackGenerator {
     }
 
     createSegmentFillPath(segment) {
-        // Use actual segment distances to calculate boundaries, not array indices
-        const allSegments = [...this.trackData.segments].sort((a, b) => (a.distance || 0) - (b.distance || 0));
-        const segmentIndex = allSegments.findIndex(s => s.segment_number === segment.segment_number);
+        // A segment's space runs from its own line to the next segment's line
+        const segments = this.trackData.segments;
         const totalLength = this.calculateTrackLength();
-        
-        // Calculate actual boundaries based on segment positions
-        let startDistance = 0;
-        let endDistance = segment.distance || 0;
-        
-        // Start distance is the position of the previous segment (if any)
-        if (segmentIndex > 0) {
-            startDistance = allSegments[segmentIndex - 1].distance || 0;
+        let pathData = this.createTrackStripPath(
+            (segment.distance || 0) / totalLength,
+            this.getSegmentEndDistance(segment) / totalLength
+        );
+
+        // The last space also covers the stretch before the first line (wraps around on closed tracks)
+        if (segment === segments[segments.length - 1] && segments[0].distance > 0) {
+            const wrapPath = this.createTrackStripPath(0, segments[0].distance / totalLength);
+            if (wrapPath) pathData = pathData ? `${pathData} ${wrapPath}` : wrapPath;
         }
-        
-        // End distance is the position of the next segment (if any), otherwise track end
-        if (segmentIndex < allSegments.length - 1) {
-            endDistance = allSegments[segmentIndex + 1].distance || 0;
-        } else {
-            endDistance = totalLength;
-        }
-        
-        const startRatio = startDistance / totalLength;
-        const endRatio = endDistance / totalLength;
-        
+
+        return pathData;
+    }
+
+    // Closed polygon of the track surface between two positions (as ratios of track length)
+    createTrackStripPath(startRatio, endRatio) {
         // Get border points for this segment range
         const leftBorderLength = this.trackData.left_border.length;
         const rightBorderLength = this.trackData.right_border.length;
@@ -872,28 +847,6 @@ class HeatTrackGenerator {
         return groups;
     }
 
-    areSegmentsContiguous(segment1, segment2) {
-        // Check if segments are consecutive by segment number
-        if (Math.abs(segment1.segment_number - segment2.segment_number) === 1) {
-            return true;
-        }
-        
-        // Special case: handle wrapping from last segment to first segment (for circular tracks)
-        const totalSegments = this.trackData.segments.length;
-        if ((segment1.segment_number === 1 && segment2.segment_number === totalSegments) ||
-            (segment1.segment_number === totalSegments && segment2.segment_number === 1)) {
-            return true;
-        }
-        
-        // Check if segments are very close in distance (allowing for small gaps)
-        const distance1 = segment1.distance || 0;
-        const distance2 = segment2.distance || 0;
-        const segmentLength = this.trackData.segment_length || 400;
-        const maxGap = segmentLength * 1.5; // Allow up to 1.5x segment length gap
-        
-        return Math.abs(distance2 - distance1) <= maxGap;
-    }
-
     doKerbSidesOverlap(side1, side2) {
         // Check if two kerb sides have any overlap
         if (side1 === 'both' || side2 === 'both') return true;
@@ -905,30 +858,9 @@ class HeatTrackGenerator {
         // Calculate the combined boundaries of all segments in the group
         const segments = kerbGroup.segments;
         const firstSegment = segments[0];
-        const lastSegment = segments[segments.length - 1];
-        
-        // Calculate the start and end positions
-        const startDistance = firstSegment.distance || 0;
-        
-        // For end distance, calculate the actual end of the last segment
-        const lastSegmentIndex = this.trackData.segments.findIndex(s => s.segment_number === lastSegment.segment_number);
-        const nextSegment = this.trackData.segments[lastSegmentIndex + 1];
-        
-        let endDistance;
-        if (nextSegment) {
-            endDistance = nextSegment.distance || 0;
-        } else {
-            // For the last segment, use the total track length to extend to the end
-            const totalLength = this.calculateTrackLength();
-            endDistance = totalLength;
-        }
-        
-        const totalLength = this.calculateTrackLength();
-        const startRatio = startDistance / totalLength;
-        const endRatio = Math.min(endDistance / totalLength, 1);
         
         // Determine which sides to render based on segment-by-segment analysis
-        const sidesToRender = this.calculateKerbSidesToRender(kerbGroup, startRatio, endRatio);
+        const sidesToRender = this.calculateKerbSidesToRender(kerbGroup);
         
         // Calculate border distance
         const borderDistance = (this.trackData.track_width / 2) * this.visualSettings.borderOffset;
@@ -939,38 +871,20 @@ class HeatTrackGenerator {
         });
     }
 
-    calculateKerbSidesToRender(kerbGroup, groupStartRatio, groupEndRatio) {
+    calculateKerbSidesToRender(kerbGroup) {
         const segments = kerbGroup.segments;
         const totalLength = this.calculateTrackLength();
-        const sidesToRender = [];
-        
+
         // Track continuous runs of each side
         let leftRuns = [];
         let rightRuns = [];
         let currentLeftRun = null;
         let currentRightRun = null;
-        
-        segments.forEach((segment, index) => {
+
+        segments.forEach(segment => {
             const segmentSide = kerbGroup.segmentSides.get(segment.segment_number);
-            const segmentStartDistance = segment.distance || 0;
-            
-            // Calculate end distance for this segment
-            let segmentEndDistance;
-            if (index < segments.length - 1) {
-                segmentEndDistance = segments[index + 1].distance || 0;
-            } else {
-                // Last segment in group
-                const lastSegmentIndex = this.trackData.segments.findIndex(s => s.segment_number === segment.segment_number);
-                const nextSegment = this.trackData.segments[lastSegmentIndex + 1];
-                if (nextSegment) {
-                    segmentEndDistance = nextSegment.distance || 0;
-                } else {
-                    segmentEndDistance = totalLength;
-                }
-            }
-            
-            const segmentStartRatio = segmentStartDistance / totalLength;
-            const segmentEndRatio = segmentEndDistance / totalLength;
+            const segmentStartRatio = (segment.distance || 0) / totalLength;
+            const segmentEndRatio = this.getSegmentEndDistance(segment) / totalLength;
             
             // Check if this segment has left side kerb
             const hasLeft = (segmentSide === 'left' || segmentSide === 'both');
@@ -1043,20 +957,6 @@ class HeatTrackGenerator {
         centerPath.setAttribute('fill', 'none');
         centerPath.setAttribute('opacity', '1');
         group.appendChild(centerPath);
-    }
-
-    interpolatePointOnCenterline(centerlineIndex, t) {
-        if (!this.centerlinePoints || centerlineIndex >= this.centerlinePoints.length - 1) {
-            return null;
-        }
-        
-        const p1 = this.centerlinePoints[centerlineIndex];
-        const p2 = this.centerlinePoints[centerlineIndex + 1];
-        
-        return [
-            p1[0] + t * (p2[0] - p1[0]),
-            p1[1] + t * (p2[1] - p1[1])
-        ];
     }
 
     calculateSegmentLineCoordinates(segment) {
@@ -1159,61 +1059,19 @@ class HeatTrackGenerator {
     // Find a point and direction at a specific distance along the centerline
     findPointAndDirectionAtDistance(targetDistance) {
         if (!this.centerlinePoints || this.centerlinePoints.length < 2) return null;
-        
-        // Calculate cumulative distances
-        const distances = [0];
-        for (let i = 1; i < this.centerlinePoints.length; i++) {
-            const prev = this.centerlinePoints[i - 1];
-            const curr = this.centerlinePoints[i];
-            const dist = Math.sqrt(
-                Math.pow(curr[0] - prev[0], 2) + 
-                Math.pow(curr[1] - prev[1], 2)
-            );
-            distances.push(distances[distances.length - 1] + dist);
-        }
-        
-        const totalLength = distances[distances.length - 1];
-        
+
         // Handle wrap-around for closed tracks
-        const normalizedDistance = targetDistance % totalLength;
-        
-        // Find the segment containing this distance
-        for (let i = 0; i < distances.length - 1; i++) {
-            if (normalizedDistance >= distances[i] && normalizedDistance <= distances[i + 1]) {
-                // Interpolate between points i and i+1
-                const segmentDistance = distances[i + 1] - distances[i];
-                if (segmentDistance === 0) {
-                    return {
-                        point: this.centerlinePoints[i],
-                        direction: [1, 0] // Default direction if no distance
-                    };
-                }
-                
-                const t = (normalizedDistance - distances[i]) / segmentDistance;
-                const p1 = this.centerlinePoints[i];
-                const p2 = this.centerlinePoints[i + 1];
-                
-                const point = [
-                    p1[0] + t * (p2[0] - p1[0]),
-                    p1[1] + t * (p2[1] - p1[1])
-                ];
-                
-                // Calculate normalized direction vector
-                const direction = this.normalize([p2[0] - p1[0], p2[1] - p1[1]]);
-                
-                return { point, direction };
-            }
-        }
-        
-        // Fallback to last point
-        const lastIndex = this.centerlinePoints.length - 1;
+        const totalLength = this.calculateTrackLength();
+        const normalizedDistance = ((targetDistance % totalLength) + totalLength) % totalLength;
+
+        const { index, t } = this.locateDistance(normalizedDistance);
+        const p1 = this.centerlinePoints[index];
+        const p2 = this.centerlinePoints[index + 1];
+        const direction = this.normalize([p2[0] - p1[0], p2[1] - p1[1]]);
+
         return {
-            point: this.centerlinePoints[lastIndex],
-            direction: lastIndex > 0 ? 
-                this.normalize([
-                    this.centerlinePoints[lastIndex][0] - this.centerlinePoints[lastIndex - 1][0],
-                    this.centerlinePoints[lastIndex][1] - this.centerlinePoints[lastIndex - 1][1]
-                ]) : [1, 0]
+            point: [p1[0] + t * (p2[0] - p1[0]), p1[1] + t * (p2[1] - p1[1])],
+            direction: direction[0] === 0 && direction[1] === 0 ? [1, 0] : direction
         };
     }
 
@@ -1250,29 +1108,10 @@ class HeatTrackGenerator {
         // Only create kerb hit areas in kerb mode
         if (this.currentMode !== 'kerb') return;
         
-        const segmentProgress = segment.distance || 0;
         const totalLength = this.calculateTrackLength();
-        
-        // Calculate actual segment length based on next segment position
-        const currentSegmentIndex = this.trackData.segments.findIndex(s => s.segment_number === segment.segment_number);
-        const nextSegment = this.trackData.segments[currentSegmentIndex + 1];
-        
-        let segmentLength;
-        if (nextSegment) {
-            // Use distance to next segment
-            segmentLength = (nextSegment.distance || 0) - segmentProgress;
-        } else {
-            // Last segment: use remaining track length or default segment length
-            const remainingLength = totalLength - segmentProgress;
-            segmentLength = Math.min(remainingLength, this.trackData.segment_length || 400);
-        }
-        
-        // Ensure positive segment length
-        segmentLength = Math.max(segmentLength, 10); // Minimum 10 units
-        
-        const startRatio = segmentProgress / totalLength;
-        const endRatio = Math.min((segmentProgress + segmentLength) / totalLength, 1);
-        
+        const startRatio = (segment.distance || 0) / totalLength;
+        const endRatio = Math.min(this.getSegmentEndDistance(segment) / totalLength, 1);
+
         // Use white border distance for hit area positioning
         const borderDistance = (this.trackData.track_width / 2) * this.visualSettings.borderOffset;
         
@@ -1289,7 +1128,8 @@ class HeatTrackGenerator {
         if (leftBorderSegment.length > 1) {
             const leftPath = this.createPathFromPoints(leftBorderSegment);
             leftPath.setAttribute('stroke', 'transparent');
-            leftPath.setAttribute('stroke-width', '20'); // Wide clickable area
+            leftPath.setAttribute('stroke-width', '16'); // Clickable width in screen pixels
+            leftPath.setAttribute('vector-effect', 'non-scaling-stroke');
             leftPath.setAttribute('fill', 'none');
             leftPath.setAttribute('opacity', '0');
             leftPath.setAttribute('class', 'kerb-hit-area');
@@ -1303,7 +1143,8 @@ class HeatTrackGenerator {
         if (rightBorderSegment.length > 1) {
             const rightPath = this.createPathFromPoints(rightBorderSegment);
             rightPath.setAttribute('stroke', 'transparent');
-            rightPath.setAttribute('stroke-width', '20'); // Wide clickable area
+            rightPath.setAttribute('stroke-width', '16'); // Clickable width in screen pixels
+            rightPath.setAttribute('vector-effect', 'non-scaling-stroke');
             rightPath.setAttribute('fill', 'none');
             rightPath.setAttribute('opacity', '0');
             rightPath.setAttribute('class', 'kerb-hit-area');
@@ -1342,7 +1183,8 @@ class HeatTrackGenerator {
             hitArea.setAttribute('x2', lineCoords.line_end[0]);
             hitArea.setAttribute('y2', lineCoords.line_end[1]);
             hitArea.setAttribute('stroke', 'transparent');
-            hitArea.setAttribute('stroke-width', '25');
+            hitArea.setAttribute('stroke-width', '20');
+            hitArea.setAttribute('vector-effect', 'non-scaling-stroke'); // Same click target size at any zoom
             hitArea.setAttribute('opacity', '0');
             hitArea.setAttribute('class', 'segment-line');
             hitArea.setAttribute('data-segment-id', segment.segment_number);
@@ -1518,8 +1360,14 @@ class HeatTrackGenerator {
 
     // Settings management methods
     loadVisualSettings() {
-        const saved = localStorage.getItem('heatTrackVisualSettings');
-        const settings = saved ? JSON.parse(saved) : { ...this.defaultSettings };
+        let saved = null;
+        try {
+            saved = JSON.parse(localStorage.getItem('heatTrackVisualSettings'));
+        } catch (error) {
+            console.warn('Ignoring unreadable saved settings:', error);
+        }
+        // Merge over the defaults so settings added after the save still get a value
+        const settings = { ...this.defaultSettings, ...(saved || {}) };
         this.applySettingsToUI(settings);
         return settings;
     }
@@ -1559,12 +1407,15 @@ class HeatTrackGenerator {
         
         if (e.target.type === 'color') {
             value = e.target.value; // Color inputs return hex strings
-        } else if (settingName === 'borderOffset') {
-            value = parseFloat(e.target.value);
         } else {
-            value = parseInt(e.target.value);
+            value = parseFloat(e.target.value);
+            if (!Number.isFinite(value)) {
+                // Empty or invalid input: restore the current value instead of storing NaN
+                e.target.value = this.visualSettings[settingName];
+                return;
+            }
         }
-        
+
         this.visualSettings[settingName] = value;
         
         if (this.trackData) {
@@ -1594,62 +1445,21 @@ class HeatTrackGenerator {
         document.getElementById('whiteLineControls').style.display = mode === 'whiteLine' ? 'block' : 'none';
         document.getElementById('editControls').style.display = mode === 'edit' ? 'block' : 'none';
         
-        // Update cursors and pointer events
-        const svg = document.getElementById('trackCanvas');
-        svg.style.cursor = this.getCursorForMode();
-        
-        const segmentLines = svg.querySelectorAll('.segment-line');
-        segmentLines.forEach(line => {
-            line.style.cursor = this.getCursorForMode();
-        });
-        
-        // Update segment number pointer events for edit and curve modes
-        const segmentNumbers = svg.querySelectorAll('.segment-number');
-        segmentNumbers.forEach(text => {
-            text.style.pointerEvents = (mode === 'edit' || mode === 'curve') ? 'auto' : 'none';
-            text.style.cursor = mode === 'edit' ? 'move' : (mode === 'curve' ? 'pointer' : 'default');
-            
-            // Update CSS classes
-            if (mode === 'edit') {
-                text.classList.add('draggable');
-            } else {
-                text.classList.remove('draggable');
-            }
-        });
-        
-        // Update distance sign pointer events for edit and curve modes
-        const distanceSigns = svg.querySelectorAll('.distance-sign');
-        distanceSigns.forEach(sign => {
-            sign.style.pointerEvents = (mode === 'edit' || mode === 'curve') ? 'auto' : 'none';
-            sign.style.cursor = mode === 'edit' ? 'move' : (mode === 'curve' ? 'pointer' : 'default');
-            
-            // Update CSS classes
-            if (mode === 'edit') {
-                sign.classList.add('draggable');
-            } else {
-                sign.classList.remove('draggable');
-            }
-        });
-        
-        // Update speed limit text pointer events for curve mode
-        const speedLimitTexts = svg.querySelectorAll('.speed-limit-text');
-        speedLimitTexts.forEach(text => {
-            text.style.pointerEvents = (mode === 'curve') ? 'auto' : 'none';
-            text.style.cursor = mode === 'curve' ? 'pointer' : 'default';
-        });
-        
-        // Re-render track to update kerb hit areas based on new mode
+        document.getElementById('trackCanvas').style.cursor = this.getCursorForMode();
+
+        // Re-render track so hit areas, cursors and pointer events match the new mode
         if (this.trackData) {
             this.renderTrack(true);
         }
     }
 
     handleMouseDown(e) {
+        if (e.button !== 0) return; // Primary button / touch / pen only
+
         const svg = document.getElementById('trackCanvas');
-        const rect = svg.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
+        const { x, y } = this.clientToViewBox(e);
+        this.lastMouseEvent = e;
+
         const element = e.target;
         let handledByMode = false;
         
@@ -1704,33 +1514,27 @@ class HeatTrackGenerator {
                 svg.style.cursor = 'grabbing';
             }
         }
+
+        // Keep receiving move/up events even if the pointer leaves the canvas mid-drag
+        if (this.isDragging) {
+            svg.setPointerCapture(e.pointerId);
+        }
     }
 
     handleMouseMove(e) {
         // Store the last mouse event for drag operations
         this.lastMouseEvent = e;
-        
-        const svg = document.getElementById('trackCanvas');
-        const rect = svg.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+
+        const { x, y } = this.clientToViewBox(e);
 
         if (this.currentMode === 'edit' && this.isDragging && this.draggedSegmentId) {
             this.updateSegmentDragPreview(x, y);
         } else if (this.isDragging && !this.draggedSegmentId) {
             // Handle panning regardless of current mode (when dragging but not dragging a segment)
-            const deltaX = x - this.lastPanX;
-            const deltaY = y - this.lastPanY;
-            
-            this.panX += deltaX;
-            this.panY += deltaY;
-            
-            const trackGroup = svg.querySelector('#trackGroup');
-            if (trackGroup) {
-                trackGroup.setAttribute('transform', 
-                    `translate(${this.panX}, ${this.panY}) scale(${this.scale})`);
-            }
-            
+            this.panX += x - this.lastPanX;
+            this.panY += y - this.lastPanY;
+            this.applyViewTransform();
+
             this.lastPanX = x;
             this.lastPanY = y;
             
@@ -1752,26 +1556,21 @@ class HeatTrackGenerator {
 
     handleWheel(e) {
         e.preventDefault();
-        
-        const svg = document.getElementById('trackCanvas');
-        const rect = svg.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
+
+        const { x, y } = this.clientToViewBox(e);
+
+        // Zoom limits are relative to the "fit to screen" scale, since track units vary per SVG
+        const fitScale = this.fitScale || 1;
         const scaleFactor = e.deltaY > 0 ? 0.9 : 1.1;
-        const newScale = Math.max(0.1, Math.min(5, this.scale * scaleFactor));
-        
+        const newScale = Math.max(fitScale * 0.2, Math.min(fitScale * 20, this.scale * scaleFactor));
+
+        // Keep the point under the cursor fixed while zooming
         const scaleChange = newScale / this.scale;
         this.panX = x - (x - this.panX) * scaleChange;
         this.panY = y - (y - this.panY) * scaleChange;
         this.scale = newScale;
-        
-        const trackGroup = svg.querySelector('#trackGroup');
-        if (trackGroup) {
-            trackGroup.setAttribute('transform', 
-                `translate(${this.panX}, ${this.panY}) scale(${this.scale})`);
-        }
-        
+        this.applyViewTransform();
+
         // Save session after view changes (with debouncing)
         this.debouncedSaveSession();
     }
@@ -1796,9 +1595,7 @@ class HeatTrackGenerator {
         
         // Recalculate spaces to next curve for all segments since curve status changed
         this.calculateSpacesToNextCurve();
-        
-        this.updateSegmentVisual(segmentId, segment);
-        
+
         // Re-render the track to update all segment displays
         this.renderTrack(true); // preserve view
         
@@ -1809,23 +1606,22 @@ class HeatTrackGenerator {
     }
 
     promptForSpeedLimit() {
-        const speedLimit = prompt(
-            "Enter speed limit for this curve: \n"
-        );
-        
-        // Check if user cancelled
-        if (speedLimit === null) {
-            return null;
+        let message = 'Enter speed limit for this curve:';
+        for (;;) {
+            const speedLimit = prompt(message);
+
+            // Check if user cancelled
+            if (speedLimit === null) {
+                return null;
+            }
+
+            // A speed limit must be a positive whole number (0 would leave the curve without a sign)
+            const parsedSpeed = Number(speedLimit.trim());
+            if (Number.isInteger(parsedSpeed) && parsedSpeed > 0) {
+                return parsedSpeed;
+            }
+            message = 'Invalid speed limit. Please enter a whole number greater than 0:';
         }
-        
-        // Parse and validate the input
-        const parsedSpeed = parseInt(speedLimit);
-        if (isNaN(parsedSpeed)) {
-            alert("Invalid speed limit. Please enter a number.");
-            return this.promptForSpeedLimit(); // Ask again
-        }
-        
-        return parsedSpeed;
     }
 
     handleKerbAreaSelection(element) {
@@ -1944,96 +1740,6 @@ class HeatTrackGenerator {
         return this.trackData.segments.find(s => s.segment_number === segment.targetCurveId);
     }
 
-    handleKerbSelection(element) {
-        const segmentId = parseInt(element.getAttribute('data-segment-id'));
-        const segment = this.trackData.segments.find(s => s.segment_number === segmentId);
-        if (!segment) return;
-        
-        if (!segment.has_kerb) {
-            // First click: enable kerbs on both sides
-            segment.has_kerb = true;
-            segment.kerb_side = 'both';
-            this.showStatus(`Segment ${segmentId} kerbs added (both sides)`, 'success');
-        } else {
-            // Cycle through kerb options: both -> left -> right -> off
-            switch (segment.kerb_side) {
-                case 'both':
-                    segment.kerb_side = 'left';
-                    this.showStatus(`Segment ${segmentId} kerbs: left side only`, 'success');
-                    break;
-                case 'left':
-                    segment.kerb_side = 'right';
-                    this.showStatus(`Segment ${segmentId} kerbs: right side only`, 'success');
-                    break;
-                case 'right':
-                    segment.has_kerb = false;
-                    segment.kerb_side = 'both';
-                    this.showStatus(`Segment ${segmentId} kerbs removed`, 'success');
-                    break;
-                default:
-                    segment.has_kerb = false;
-                    segment.kerb_side = 'both';
-                    this.showStatus(`Segment ${segmentId} kerbs removed`, 'success');
-                    break;
-            }
-        }
-        
-        this.renderTrack(true); // Preserve view when toggling kerb
-        
-        // Save session after kerb changes
-        this.saveSession();
-    }
-
-    updateSegmentVisual(segmentId, segment) {
-        const svg = document.getElementById('trackCanvas');
-        const trackGroup = svg.querySelector('#trackGroup');
-        if (!trackGroup) return;
-        
-        const visualLine = trackGroup.querySelector(`[data-segment-id="${segmentId}"].segment-line-visual`);
-        const speedTextId = `speed-text-${segmentId}`;
-        let speedSignGroup = trackGroup.querySelector(`#${speedTextId}`);
-        
-        if (visualLine) {
-            visualLine.setAttribute('stroke-width', this.getSegmentStrokeWidth(segment.is_curve));
-            
-            if (segment.is_curve) {
-                const lineCoords = this.calculateSegmentLineCoordinates(segment);
-                if (lineCoords) {
-                    if (!speedSignGroup) {
-                        speedSignGroup = this.createSpeedLimitText(segment, trackGroup);
-                    } else {
-                        // Update speed limit position with the new offset system
-                        const speedLimitInfo = this.calculateSpeedLimitPosition(segment);
-                        if (speedLimitInfo) {
-                            // Update rotation angle and position
-                            const angle = Math.atan2(speedLimitInfo.direction[1], speedLimitInfo.direction[0]) * 180 / Math.PI;
-                            speedSignGroup.setAttribute('transform', `translate(${speedLimitInfo.position[0]}, ${speedLimitInfo.position[1]}) rotate(${angle})`);
-                            
-                            // Update the text content within the sign
-                            const speedText = speedSignGroup.querySelector('.speed-limit-sign-number');
-                            if (speedText) {
-                                speedText.textContent = segment.speed_limit;
-                                speedText.setAttribute('font-size', this.visualSettings.speedLimitSize * 1.8);
-                            }
-                            
-                            // Update the image size
-                            const speedImage = speedSignGroup.querySelector('.speed-limit-sign-image');
-                            if (speedImage) {
-                                const signSize = this.visualSettings.speedLimitSize * 3;
-                                speedImage.setAttribute('x', -signSize / 2);
-                                speedImage.setAttribute('y', -signSize / 2);
-                                speedImage.setAttribute('width', signSize);
-                                speedImage.setAttribute('height', signSize);
-                            }
-                        }
-                    }
-                }
-            } else {
-                if (speedSignGroup) speedSignGroup.remove();
-            }
-        }
-    }
-
     startSegmentDrag(element, x, y) {
         this.isDragging = true;
         this.dragStartX = x;
@@ -2069,32 +1775,16 @@ class HeatTrackGenerator {
     updateSegmentDragPreview(x, y) {
         if (!this.draggedSegmentId || !this.trackData) return;
 
-        // Convert screen coordinates to SVG coordinates
-        const svgPoint = this.screenToSVGCoordinates(x, y);
+        // Convert viewBox coordinates to track coordinates
+        const trackPoint = this.viewBoxToTrack(x, y);
 
         // Find the closest point on the centerline
-        const closestPoint = this.findClosestPointOnCenterline(svgPoint.x, svgPoint.y);
-        
+        const closestPoint = this.findClosestPointOnCenterline(trackPoint.x, trackPoint.y);
+
         if (closestPoint) {
             // Update visual preview of where the segment would be placed
             this.showSegmentDragPreview(closestPoint);
         }
-    }
-
-    screenToSVGCoordinates(screenX, screenY) {
-        // Convert screen coordinates to SVG space coordinates
-        const svg = document.getElementById('trackCanvas');
-        const rect = svg.getBoundingClientRect();
-        
-        // Convert from SVG element pixels to viewBox coordinates  
-        const viewBoxX = screenX * (this.viewBoxWidth / rect.width);
-        const viewBoxY = screenY * (this.viewBoxHeight / rect.height);
-        
-        // Remove the track group's transform (translate + scale)
-        const trackX = (viewBoxX - this.panX) / this.scale;
-        const trackY = (viewBoxY - this.panY) / this.scale;
-        
-        return { x: trackX, y: trackY };
     }
 
     findClosestPointOnCenterline(x, y) {
@@ -2157,17 +1847,11 @@ class HeatTrackGenerator {
             return;
         }
         
-        const svg = document.getElementById('trackCanvas');
-        const rect = svg.getBoundingClientRect();
-        
-        // Use the last mouse position from the stored event
+        // Use the last pointer position from the stored event
         if (this.lastMouseEvent) {
-            const currentX = this.lastMouseEvent.clientX - rect.left;
-            const currentY = this.lastMouseEvent.clientY - rect.top;
-            
-            // Convert to SVG coordinates
-            const svgPoint = this.screenToSVGCoordinates(currentX, currentY);
-            const closestPoint = this.findClosestPointOnCenterline(svgPoint.x, svgPoint.y);
+            const { x, y } = this.clientToViewBox(this.lastMouseEvent);
+            const trackPoint = this.viewBoxToTrack(x, y);
+            const closestPoint = this.findClosestPointOnCenterline(trackPoint.x, trackPoint.y);
             
             if (closestPoint) {
                 this.moveSegmentToPosition(this.draggedSegmentId, closestPoint);
@@ -2178,33 +1862,30 @@ class HeatTrackGenerator {
     }
 
     moveSegmentToPosition(segmentId, closestPoint) {
-        const segment = this.trackData.segments.find(s => s.segment_number === segmentId);
+        const segments = this.trackData.segments;
+        const segmentIndex = segments.findIndex(s => s.segment_number === segmentId);
+        const segment = segments[segmentIndex];
         if (!segment || !closestPoint) return;
-        
-        // Calculate new position based on closest point on centerline
-        const centerlineIndex = closestPoint.index;
-        
-        // Calculate cumulative distance to this point
-        let newDistance = 0;
-        for (let i = 1; i <= centerlineIndex; i++) {
-            const prev = this.trackData.centerline[i - 1];
-            const curr = this.trackData.centerline[i];
-            if (prev && curr) {
-                const dist = Math.sqrt(
-                    Math.pow(curr[0] - prev[0], 2) + Math.pow(curr[1] - prev[1], 2)
-                );
-                newDistance += dist;
-            }
+
+        const distances = this.getCumulativeDistances();
+        const totalLength = distances[distances.length - 1];
+
+        // Keep segments in order: a line can't be dragged onto or past its neighbours
+        const minGap = (this.trackData.segment_length || 300) * 0.1;
+        const lowerBound = segmentIndex > 0 ? segments[segmentIndex - 1].distance + minGap : 0;
+        const upperBound = segmentIndex < segments.length - 1 ? segments[segmentIndex + 1].distance - minGap : totalLength - minGap;
+        if (lowerBound > upperBound) {
+            this.showStatus(`No room to move segment ${segmentId}`, 'warning');
+            return;
         }
-        
+        const newDistance = Math.min(Math.max(distances[closestPoint.index], lowerBound), upperBound);
+        const { index, t } = this.locateDistance(newDistance);
+
         // Update the moved segment's position
         segment.distance = newDistance;
-        segment.centerline_index = centerlineIndex;
-        segment.interpolation_t = 0; // Position exactly on centerline point
-        
-        // The new segment fill calculation will automatically handle how this affects
-        // the boundaries of adjacent segments when the track is re-rendered
-        
+        segment.centerline_index = index;
+        segment.interpolation_t = t;
+
         // Re-render the track to update segment fills based on new positions
         this.renderTrack(true); // Preserve view when moving segments
         
@@ -2212,36 +1893,6 @@ class HeatTrackGenerator {
         this.saveSession();
         
         this.showStatus(`Segment ${segmentId} moved - adjacent segments updated`, 'success');
-    }
-
-    calculateDirectionAtPoint(centerlineIndex) {
-        if (!this.trackData || !this.trackData.centerline) return [1, 0];
-        
-        const points = this.trackData.centerline;
-        let direction;
-        
-        if (centerlineIndex === 0) {
-            // First point: use direction to next point
-            const next = points[centerlineIndex + 1];
-            const curr = points[centerlineIndex];
-            direction = [next[0] - curr[0], next[1] - curr[1]];
-        } else if (centerlineIndex === points.length - 1) {
-            // Last point: use direction from previous point
-            const curr = points[centerlineIndex];
-            const prev = points[centerlineIndex - 1];
-            direction = [curr[0] - prev[0], curr[1] - prev[1]];
-        } else {
-            // Middle points: average direction
-            const prev = points[centerlineIndex - 1];
-            const curr = points[centerlineIndex];
-            const next = points[centerlineIndex + 1];
-            
-            const incoming = [curr[0] - prev[0], curr[1] - prev[1]];
-            const outgoing = [next[0] - curr[0], next[1] - curr[1]];
-            direction = [(incoming[0] + outgoing[0]) / 2, (incoming[1] + outgoing[1]) / 2];
-        }
-        
-        return this.normalize(direction);
     }
 
     cancelSegmentDrag() {
@@ -2265,8 +1916,8 @@ class HeatTrackGenerator {
         this.isDragging = false;
         this.draggedSegmentId = null;
         this.draggedElement = null;
-        
-        svg.style.cursor = 'crosshair';
+
+        svg.style.cursor = this.getCursorForMode();
     }
 
     // White line methods (similar to kerb methods but for solid white lines)
@@ -2333,77 +1984,16 @@ class HeatTrackGenerator {
         this.showStatus(`${updatedCount} segments pointing to curve ${targetCurveSegment.segment_number}: ${actionDescription}`, 'success');
     }
 
-    handleWhiteLineSelection(element) {
-        const segmentId = parseInt(element.getAttribute('data-segment-id'));
-        const segment = this.trackData.segments.find(s => s.segment_number === segmentId);
-        if (!segment) return;
-        
-        // Initialize white line properties if they don't exist
-        if (!segment.has_white_line) {
-            segment.has_white_line = false;
-            segment.white_line_side = 'left'; // Default to left
-        }
-        
-        if (!segment.has_white_line) {
-            // First click: enable white lines on left side (default)
-            segment.has_white_line = true;
-            segment.white_line_side = 'left';
-            this.showStatus(`Segment ${segmentId} white line added (left side)`, 'success');
-        } else {
-            // Cycle through white line options: left -> right -> off
-            switch (segment.white_line_side) {
-                case 'left':
-                    segment.white_line_side = 'right';
-                    this.showStatus(`Segment ${segmentId} white line: right side`, 'success');
-                    break;
-                case 'right':
-                    segment.has_white_line = false;
-                    segment.white_line_side = 'left'; // Reset to default
-                    this.showStatus(`Segment ${segmentId} white line removed`, 'success');
-                    break;
-                default:
-                    segment.has_white_line = false;
-                    segment.white_line_side = 'left'; // Reset to default
-                    this.showStatus(`Segment ${segmentId} white line removed`, 'success');
-                    break;
-            }
-        }
-        
-        this.renderTrack(true); // Preserve view when toggling white lines
-        
-        // Save session after white line changes
-        this.saveSession();
-    }
-
     createWhiteLineHitAreas(segment, group) {
         // Only create white line hit areas in white line mode
         if (this.currentMode !== 'whiteLine') return;
         
-        const segmentProgress = segment.distance || 0;
         const totalLength = this.calculateTrackLength();
-        
-        // Calculate actual segment length based on next segment position
-        const currentSegmentIndex = this.trackData.segments.findIndex(s => s.segment_number === segment.segment_number);
-        const nextSegment = this.trackData.segments[currentSegmentIndex + 1];
-        
-        let segmentLength;
-        if (nextSegment) {
-            // Use distance to next segment
-            segmentLength = (nextSegment.distance || 0) - segmentProgress;
-        } else {
-            // For the last segment, use the default segment length
-            segmentLength = this.trackData.segment_length || 400;
-        }
-        
-        // Ensure positive segment length
-        segmentLength = Math.max(segmentLength, 10); // Minimum 10 units
-        
-        const startRatio = segmentProgress / totalLength;
-        const endRatio = Math.min((segmentProgress + segmentLength) / totalLength, 1);
-        
+        const startRatio = (segment.distance || 0) / totalLength;
+        const endRatio = Math.min(this.getSegmentEndDistance(segment) / totalLength, 1);
+
         const trackBorderDistance = (this.trackData.track_width / 2);
-        const whiteLineDistance = trackBorderDistance + (this.visualSettings.whiteLineWidth / 2)
-        
+
         // Create hit areas at the white line positions
         const centerlineSegment = this.trackData.centerline.slice(
             Math.floor(startRatio * (this.trackData.centerline.length - 1)),
@@ -2417,7 +2007,8 @@ class HeatTrackGenerator {
         if (leftBorderSegment.length > 1) {
             const leftHitArea = this.createPathFromPoints(leftBorderSegment);
             leftHitArea.setAttribute('stroke', 'transparent');
-            leftHitArea.setAttribute('stroke-width', '60');
+            leftHitArea.setAttribute('stroke-width', '16'); // Clickable width in screen pixels
+            leftHitArea.setAttribute('vector-effect', 'non-scaling-stroke');
             leftHitArea.setAttribute('fill', 'none');
             leftHitArea.setAttribute('opacity', '0');
             leftHitArea.setAttribute('class', 'white-line-hit-area');
@@ -2430,7 +2021,8 @@ class HeatTrackGenerator {
         if (rightBorderSegment.length > 1) {
             const rightHitArea = this.createPathFromPoints(rightBorderSegment);
             rightHitArea.setAttribute('stroke', 'transparent');
-            rightHitArea.setAttribute('stroke-width', '60');
+            rightHitArea.setAttribute('stroke-width', '16'); // Clickable width in screen pixels
+            rightHitArea.setAttribute('vector-effect', 'non-scaling-stroke');
             rightHitArea.setAttribute('fill', 'none');
             rightHitArea.setAttribute('opacity', '0');
             rightHitArea.setAttribute('class', 'white-line-hit-area');
@@ -2491,11 +2083,6 @@ class HeatTrackGenerator {
         return groups;
     }
 
-    doWhiteLineSidesOverlap(side1, side2) {
-        // White lines can only be on one side, so they only overlap if they're the same side
-        return side1 === side2;
-    }
-
     createUnifiedWhiteLineForGroup(whiteLineGroup, group) {
         // Calculate the combined boundaries of all segments in the group
         const segments = whiteLineGroup.segments;
@@ -2503,24 +2090,9 @@ class HeatTrackGenerator {
         const lastSegment = segments[segments.length - 1];
         
         // Calculate the start and end positions
-        const startDistance = firstSegment.distance || 0;
-        
-        // For end distance, calculate the actual end of the last segment
-        const lastSegmentIndex = this.trackData.segments.findIndex(s => s.segment_number === lastSegment.segment_number);
-        const nextSegment = this.trackData.segments[lastSegmentIndex + 1];
-        
-        let endDistance;
-        if (nextSegment) {
-            endDistance = nextSegment.distance || 0;
-        } else {
-            // For the last segment, use the total track length instead of adding segment length
-            const totalLength = this.calculateTrackLength();
-            endDistance = totalLength;
-        }
-        
         const totalLength = this.calculateTrackLength();
-        const startRatio = startDistance / totalLength;
-        const endRatio = Math.min(endDistance / totalLength, 1);
+        const startRatio = (firstSegment.distance || 0) / totalLength;
+        const endRatio = Math.min(this.getSegmentEndDistance(lastSegment) / totalLength, 1);
         
         // Determine which side to render (should be consistent across the group)
         const side = firstSegment.white_line_side;
@@ -2557,86 +2129,6 @@ class HeatTrackGenerator {
         }
     }
 
-    createKerbForSegment(segment, group) {
-        // Create red and white striped kerbs on track borders for this segment
-        const segmentProgress = segment.distance || 0;
-        const totalLength = this.calculateTrackLength();
-        
-        // Calculate actual segment length based on next segment position
-        const currentSegmentIndex = this.trackData.segments.findIndex(s => s.segment_number === segment.segment_number);
-        const nextSegment = this.trackData.segments[currentSegmentIndex + 1];
-        
-        let segmentLength;
-        if (nextSegment) {
-            // Use distance to next segment
-            segmentLength = (nextSegment.distance || 0) - segmentProgress;
-        } else {
-            // Last segment: use remaining track length or default segment length
-            const remainingLength = totalLength - segmentProgress;
-            segmentLength = Math.min(remainingLength, this.trackData.segment_length || 400);
-        }
-        
-        // Ensure positive segment length
-        segmentLength = Math.max(segmentLength, 10); // Minimum 10 units
-        
-        // Calculate border distance for white track borders
-        const borderDistance = (this.trackData.track_width / 2) * this.visualSettings.borderOffset;
-        
-        // Create kerb paths that start at the white border and extend outward
-        if (segment.kerb_side === 'left' || segment.kerb_side === 'both') {
-            this.createKerbPathAtBorder(segment, 'left', borderDistance, group);
-        }
-        if (segment.kerb_side === 'right' || segment.kerb_side === 'both') {
-            this.createKerbPathAtBorder(segment, 'right', borderDistance, group);
-        }
-    }
-
-    createKerbPathAtBorder(segment, side, borderDistance, group) {
-        const segmentProgress = segment.distance || 0;
-        const totalLength = this.calculateTrackLength();
-        
-        // Calculate actual segment length based on next segment position
-        const currentSegmentIndex = this.trackData.segments.findIndex(s => s.segment_number === segment.segment_number);
-        const nextSegment = this.trackData.segments[currentSegmentIndex + 1];
-        
-        let segmentLength;
-        if (nextSegment) {
-            // Use distance to next segment
-            segmentLength = (nextSegment.distance || 0) - segmentProgress;
-        } else {
-            // Last segment: use remaining track length or default segment length
-            const remainingLength = totalLength - segmentProgress;
-            segmentLength = Math.min(remainingLength, this.trackData.segment_length || 400);
-        }
-        
-        // Ensure positive segment length
-        segmentLength = Math.max(segmentLength, 10); // Minimum 10 units
-        
-        const startRatio = segmentProgress / totalLength;
-        const endRatio = Math.min((segmentProgress + segmentLength) / totalLength, 1);
-        
-        // Calculate the kerb offset: position kerb so its inner edge aligns with the outer edge of the white border
-        // Account for the border line stroke width
-        const borderStrokeWidth = this.visualSettings.borderWidth || 2;
-        const kerbOffset = borderDistance - (borderStrokeWidth / 2) + (this.visualSettings.kerbWidth / 2);
-        
-        // Create kerb path at the correct distance from centerline
-        const kerbPoints = this.createParallelLine(this.trackData.centerline.slice(
-            Math.floor(startRatio * (this.trackData.centerline.length - 1)),
-            Math.ceil(endRatio * (this.trackData.centerline.length - 1)) + 1
-        ), kerbOffset, side);
-        
-        if (kerbPoints.length > 1) {
-            this.createKerbPath(kerbPoints, `${side}-kerb-${segment.segment_number}`, group);
-        }
-    }
-
-    getTrackBorderSegment(borderPoints, startRatio, endRatio) {
-        const startIndex = Math.floor(startRatio * (borderPoints.length - 1));
-        const endIndex = Math.floor(endRatio * (borderPoints.length - 1));
-        return borderPoints.slice(startIndex, endIndex + 1);
-    }
-
     createKerbPath(points, id, group) {
         if (points.length < 2) return;
         
@@ -2665,17 +2157,8 @@ class HeatTrackGenerator {
     }
 
     calculateTrackLength() {
-        if (!this.trackData || !this.trackData.centerline) return 1000;
-        
-        let length = 0;
-        for (let i = 1; i < this.trackData.centerline.length; i++) {
-            const prev = this.trackData.centerline[i - 1];
-            const curr = this.trackData.centerline[i];
-            const dx = curr[0] - prev[0];
-            const dy = curr[1] - prev[1];
-            length += Math.sqrt(dx * dx + dy * dy);
-        }
-        return length;
+        const distances = this.getCumulativeDistances();
+        return distances[distances.length - 1] || 1000;
     }
 
     // Export methods
@@ -2685,118 +2168,106 @@ class HeatTrackGenerator {
             return;
         }
 
-        const svg = document.getElementById('trackCanvas');
-        
         if (format === 'svg') {
-            this.exportSVG(svg);
+            this.exportSVG();
         } else if (format === 'png') {
-            this.exportPNG(svg);
+            this.exportPNG();
         }
     }
 
-    exportSVG(svg) {
-        // Create a clean copy of the SVG without background styling
-        const svgClone = svg.cloneNode(true);
-        
-        // Remove background styles that would add background color
-        svgClone.style.background = 'none';
-        svgClone.style.backgroundColor = 'transparent';
-        
-        // Ensure the SVG itself doesn't have a background fill
-        svgClone.removeAttribute('style');
-        
-        // Remove the grid pattern and background rect
-        const defs = svgClone.querySelector('defs');
-        if (defs) {
-            defs.remove();
-        }
-        
-        // Remove the background rect that uses the grid pattern
-        const backgroundRect = svgClone.querySelector('rect[fill*="grid"]');
-        if (backgroundRect) {
-            backgroundRect.remove();
-        }
-        
-        // Remove any other background rects that might have solid fills
-        const allRects = svgClone.querySelectorAll('rect');
-        allRects.forEach(rect => {
-            const fill = rect.getAttribute('fill');
-            if (fill && (fill.includes('url(#grid)') || fill === '#1a1a1a' || fill === '#555')) {
-                rect.remove();
-            }
-        });
-        
-        const svgData = new XMLSerializer().serializeToString(svgClone);
-        const blob = new Blob([svgData], { type: 'image/svg+xml' });
-        const url = URL.createObjectURL(blob);
-        
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'heat_track.svg';
-        link.click();
-        
-        URL.revokeObjectURL(url);
+    // Build a standalone SVG of the whole track, independent of the current pan/zoom,
+    // without the editor-only hit areas and inline interaction styles
+    buildExportSVG() {
+        const trackGroup = document.querySelector('#trackCanvas #trackGroup');
+        const bbox = trackGroup.getBBox(); // In track units, excludes the group's own pan/zoom transform
+        const margin = Math.max(this.visualSettings.whiteLineWidth, this.visualSettings.kerbWidth, this.visualSettings.borderWidth) + 20;
+        const viewBox = {
+            x: bbox.x - margin,
+            y: bbox.y - margin,
+            width: bbox.width + margin * 2,
+            height: bbox.height + margin * 2
+        };
+
+        const clone = trackGroup.cloneNode(true);
+        clone.removeAttribute('transform');
+        clone.removeAttribute('id');
+        clone.querySelectorAll('.segment-line, .kerb-hit-area, .white-line-hit-area').forEach(el => el.remove());
+        clone.querySelectorAll('[style]').forEach(el => el.removeAttribute('style'));
+        clone.querySelectorAll('.segment-being-dragged').forEach(el => el.classList.remove('segment-being-dragged'));
+
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`);
+        svg.setAttribute('width', viewBox.width);
+        svg.setAttribute('height', viewBox.height);
+        svg.appendChild(clone);
+        return { svg, width: viewBox.width, height: viewBox.height };
+    }
+
+    exportSVG() {
+        const { svg } = this.buildExportSVG();
+        const svgData = new XMLSerializer().serializeToString(svg);
+        this.downloadBlob(new Blob([svgData], { type: 'image/svg+xml' }), 'heat_track.svg');
         this.showStatus('Track exported as SVG', 'success');
     }
 
-    exportPNG(svg) {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        
-        canvas.width = 2000;
-        canvas.height = 1600;
-        
-        // Create a clean copy of the SVG without background styling
-        const svgClone = svg.cloneNode(true);
-        svgClone.style.background = 'none';
-        svgClone.style.backgroundColor = 'transparent';
-        svgClone.removeAttribute('style');
-        
-        // Remove the grid pattern and background rect
-        const defs = svgClone.querySelector('defs');
-        if (defs) {
-            defs.remove();
-        }
-        
-        // Remove the background rect that uses the grid pattern
-        const backgroundRect = svgClone.querySelector('rect[fill*="grid"]');
-        if (backgroundRect) {
-            backgroundRect.remove();
-        }
-        
-        // Remove any other background rects that might have solid fills
-        const allRects = svgClone.querySelectorAll('rect');
-        allRects.forEach(rect => {
-            const fill = rect.getAttribute('fill');
-            if (fill && (fill.includes('url(#grid)') || fill === '#1a1a1a' || fill === '#555')) {
-                rect.remove();
-            }
-        });
-        
-        const svgData = new XMLSerializer().serializeToString(svgClone);
+    exportPNG() {
+        const { svg, width, height } = this.buildExportSVG();
+
+        // Browsers cap canvas dimensions (~16k px per side), so clamp the requested width
+        const MAX_CANVAS_SIDE = 16000;
+        const requestedWidth = parseInt(document.getElementById('exportWidth').value) || 4000;
+        const pixelScale = Math.min(requestedWidth / width, MAX_CANVAS_SIDE / width, MAX_CANVAS_SIDE / height);
+        const canvasWidth = Math.round(width * pixelScale);
+        const canvasHeight = Math.round(height * pixelScale);
+
+        // Rasterize the SVG at the output size so it stays sharp and keeps its aspect ratio
+        svg.setAttribute('width', canvasWidth);
+        svg.setAttribute('height', canvasHeight);
+        const svgData = new XMLSerializer().serializeToString(svg);
+        const svgUrl = URL.createObjectURL(new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' }));
+
+        this.showLoading(true);
         const img = new Image();
-        
         img.onload = () => {
-            // Don't fill background - leave it transparent
-            // ctx.fillStyle = '#555';
-            // ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            
+            URL.revokeObjectURL(svgUrl);
+            const canvas = document.createElement('canvas');
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            // Background is left transparent
+            canvas.getContext('2d').drawImage(img, 0, 0, canvasWidth, canvasHeight);
+
             canvas.toBlob(blob => {
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = 'heat_track.png';
-                link.click();
-                URL.revokeObjectURL(url);
-                this.showStatus('Track exported as PNG', 'success');
+                this.showLoading(false);
+                if (!blob) {
+                    this.showStatus('PNG export failed: image too large, try a smaller width', 'error');
+                    return;
+                }
+                this.downloadBlob(blob, 'heat_track.png');
+                this.showStatus(`Track exported as PNG (${canvasWidth}×${canvasHeight})`, 'success');
             });
         };
-        
-        const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-        const svgUrl = URL.createObjectURL(svgBlob);
+        img.onerror = () => {
+            URL.revokeObjectURL(svgUrl);
+            this.showLoading(false);
+            this.showStatus('PNG export failed', 'error');
+        };
         img.src = svgUrl;
+    }
+
+    downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+
+        // Revoking immediately can cancel the download in some browsers
+        setTimeout(() => {
+            link.remove();
+            URL.revokeObjectURL(url);
+        }, 1000);
     }
 
     // Session persistence methods
@@ -2846,31 +2317,24 @@ class HeatTrackGenerator {
                 return;
             }
             
-            // Restore centerline points
-            if (sessionData.centerlinePoints && sessionData.centerlinePoints.length > 0) {
-                this.centerlinePoints = sessionData.centerlinePoints;
-                this.showCenterlinePreview();
-            }
-            
-            // Restore track data
+            // Restore track data (or just the centerline preview if no track was generated yet).
+            // Nothing here may save the session before trackData is restored, or the track is lost.
             if (sessionData.trackData) {
                 this.trackData = sessionData.trackData;
+                // Share one array so cached distances apply to both
+                this.centerlinePoints = this.trackData.centerline;
                 this.renderTrack();
-                
+
                 // Restore view state after track is rendered
                 if (sessionData.viewState) {
-                    this.scale = sessionData.viewState.scale || 1;
+                    this.scale = sessionData.viewState.scale || this.scale;
                     this.panX = sessionData.viewState.panX || 0;
                     this.panY = sessionData.viewState.panY || 0;
-                    
-                    // Apply the restored view transform
-                    const svg = document.getElementById('trackCanvas');
-                    const trackGroup = svg.querySelector('#trackGroup');
-                    if (trackGroup) {
-                        trackGroup.setAttribute('transform', 
-                            `translate(${this.panX}, ${this.panY}) scale(${this.scale})`);
-                    }
+                    this.applyViewTransform();
                 }
+            } else if (sessionData.centerlinePoints && sessionData.centerlinePoints.length > 0) {
+                this.centerlinePoints = sessionData.centerlinePoints;
+                this.showCenterlinePreview();
             }
             
             // Restore mode
@@ -2916,58 +2380,15 @@ class HeatTrackGenerator {
                 }
             };
 
-            // Convert to JSON string
-            const jsonString = JSON.stringify(trackSaveData, null, 2);
-            
-            // Create blob and download
-            const blob = new Blob([jsonString], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            
             // Create filename with timestamp
-            const now = new Date();
-            const timestamp = now.toISOString().slice(0, 19).replace(/[:-]/g, '');
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
             const filename = `heat_track_${timestamp}.json`;
-            
-            // Create download link and trigger download
-            const downloadLink = document.createElement('a');
-            downloadLink.href = url;
-            downloadLink.download = filename;
-            downloadLink.style.display = 'none'; // Make sure link is hidden
-            document.body.appendChild(downloadLink);
-            downloadLink.click();
-            
-            // Clean up after a short delay to ensure download starts
-            setTimeout(() => {
-                document.body.removeChild(downloadLink);
-                URL.revokeObjectURL(url);
-            }, 100);
-            
+
+            const jsonString = JSON.stringify(trackSaveData, null, 2);
+            this.downloadBlob(new Blob([jsonString], { type: 'application/json' }), filename);
+
             this.showStatus(`Track saved as ${filename}`, 'success');
-            
-            // Ensure track remains visible after save and save session
-            if (this.trackData && this.centerlinePoints) {
-                // Save session to prevent any loss
-                this.saveSession();
-                
-                // Store references to prevent garbage collection
-                const trackDataBackup = this.trackData;
-                const centerlineBackup = this.centerlinePoints;
-                
-                // Re-render track to ensure it stays visible
-                setTimeout(() => {
-                    // Double-check that data is still there
-                    if (!this.trackData || !this.centerlinePoints) {
-                        console.warn('Track data was cleared after save, restoring from backup');
-                        this.trackData = trackDataBackup;
-                        this.centerlinePoints = centerlineBackup;
-                    }
-                    
-                    if (this.trackData && this.centerlinePoints) {
-                        this.renderTrack(true); // Preserve view
-                    }
-                }, 200);
-            }
-            
+
         } catch (error) {
             console.error('Error saving track:', error);
             this.showStatus('Failed to save track', 'error');
@@ -2988,9 +2409,10 @@ class HeatTrackGenerator {
                 throw new Error('Invalid track file format');
             }
             
-            // Load the track data
-            this.centerlinePoints = trackData.centerlinePoints;
+            // Load the track data (one shared centerline array, as after generating)
             this.trackData = trackData.trackData;
+            this.centerlinePoints = this.trackData.centerline || trackData.centerlinePoints;
+            this.trackData.centerline = this.centerlinePoints;
             
             // Load visual settings if available
             if (trackData.visualSettings) {
@@ -3008,9 +2430,6 @@ class HeatTrackGenerator {
                 const segmentLengthInput = document.getElementById('segmentLength');
                 if (segmentLengthInput) segmentLengthInput.value = this.trackData.segment_length;
             }
-            
-            // Show centerline preview
-            this.showCenterlinePreview();
             
             // Render the track with all modifications
             this.renderTrack();
@@ -3048,75 +2467,16 @@ class HeatTrackGenerator {
         statusDiv.textContent = message;
         statusDiv.className = `status ${type}`;
         statusDiv.style.display = 'block';
-        
-        setTimeout(() => {
+
+        // Restart the timer so an older message's timeout doesn't hide this one early
+        clearTimeout(this.statusTimeout);
+        this.statusTimeout = setTimeout(() => {
             statusDiv.style.display = 'none';
         }, 5000);
     }
 
     showLoading(show) {
         document.getElementById('loading').style.display = show ? 'block' : 'none';
-    }
-
-    // Debug function to visualize points
-    showDebugPoint(point, type = 'debug', color = 'red') {
-        const svg = document.getElementById('trackCanvas');
-        let debugGroup = svg.querySelector('#debugGroup');
-        
-        if (!debugGroup) {
-            debugGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            debugGroup.id = 'debugGroup';
-            svg.appendChild(debugGroup);
-        }
-        
-        // Remove previous debug points of the same type
-        const existingPoints = debugGroup.querySelectorAll(`[data-debug-type="${type}"]`);
-        existingPoints.forEach(el => el.remove());
-        
-        // Create debug circle
-        const debugCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        debugCircle.setAttribute('cx', point.x);
-        debugCircle.setAttribute('cy', point.y);
-        debugCircle.setAttribute('r', '8');
-        debugCircle.setAttribute('fill', color);
-        debugCircle.setAttribute('stroke', 'white');
-        debugCircle.setAttribute('stroke-width', '2');
-        debugCircle.setAttribute('opacity', '0.8');
-        debugCircle.setAttribute('data-debug-type', type);
-        debugCircle.setAttribute('transform', `translate(${this.panX}, ${this.panY}) scale(${this.scale})`);
-        debugCircle.style.pointerEvents = 'none';
-        debugGroup.appendChild(debugCircle);
-        
-        // Create debug text showing coordinates
-        const debugText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        debugText.setAttribute('x', point.x + 15);
-        debugText.setAttribute('y', point.y - 10);
-        debugText.setAttribute('fill', this.visualSettings.debugTextColor);
-        debugText.setAttribute('font-size', '12');
-        debugText.setAttribute('font-weight', 'bold');
-        debugText.setAttribute('stroke', 'white');
-        debugText.setAttribute('stroke-width', '0.5');
-        debugText.setAttribute('data-debug-type', type);
-        debugText.setAttribute('transform', `translate(${this.panX}, ${this.panY}) scale(${this.scale})`);
-        debugText.style.pointerEvents = 'none';
-        debugText.textContent = `${type}: (${point.x.toFixed(1)}, ${point.y.toFixed(1)})`;
-        debugGroup.appendChild(debugText);
-        
-        // Auto-remove debug point after 3 seconds
-        setTimeout(() => {
-            debugCircle.remove();
-            debugText.remove();
-        }, 3000);
-        
-        console.log(`Debug ${type} point:`, point);
-    }
-
-    clearDebugPoints() {
-        const svg = document.getElementById('trackCanvas');
-        const debugGroup = svg.querySelector('#debugGroup');
-        if (debugGroup) {
-            debugGroup.remove();
-        }
     }
 }
 

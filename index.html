@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Heat: Pedal to the Metal - Track Generator</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏁</text></svg>">
     <style>
         * {
             margin: 0;
@@ -403,6 +404,7 @@
             border: 1px solid #4a4a4a;
             background: #1a1a1a;
             border-radius: 8px;
+            touch-action: none; /* Let pointer events handle pan/drag on touch screens */
         }
 
         .canvas-overlay {
@@ -637,8 +639,6 @@
             pointer-events: none;
         }
     </style>
-
-    </style>
 </head>
 <body>
     <div class="container" id="container">
@@ -781,10 +781,6 @@
                     <div class="curve-controls" id="editControls" style="display: none;">
                         <p><strong>Edit Segments</strong><br>
                         Drag and drop segments to reposition them along the track. Click and drag segment numbers or lines to move them.</p>
-                        <button class="btn secondary" id="clearDebugBtn" style="margin-top: 12px;">
-                            <span>🐛</span>
-                            Clear Debug Points
-                        </button>
                     </div>
                 </div>
             </div>
@@ -813,7 +809,7 @@
                         </div>
                         <div class="form-group">
                             <label for="speedLimitOffset">Speed Limit Offset</label>
-                            <input type="number" id="speedLimitOffset" min="0" max="300" value="100">
+                            <input type="number" id="speedLimitOffset" min="0" max="300" value="230">
                         </div>
                     </div>
                     
@@ -837,7 +833,7 @@
                         </div>
                         <div class="form-group">
                             <label for="centerlineWidth">Centerline Width</label>
-                            <input type="number" id="centerlineWidth" min="3" max="20" value="10">
+                            <input type="number" id="centerlineWidth" min="3" max="20" value="5">
                         </div>
                     </div>
                     
@@ -845,11 +841,11 @@
                         <h3>Centerline Dash</h3>
                         <div class="form-group">
                             <label for="dashLength">Dash Length</label>
-                            <input type="number" id="dashLength" min="10" max="50" value="25">
+                            <input type="number" id="dashLength" min="10" max="50" value="20">
                         </div>
                         <div class="form-group">
                             <label for="gapLength">Gap Length</label>
-                            <input type="number" id="gapLength" min="10" max="50" value="25">
+                            <input type="number" id="gapLength" min="10" max="50" value="20">
                         </div>
                     </div>
                     
@@ -857,15 +853,15 @@
                         <h3>Racing Kerbs</h3>
                         <div class="form-group">
                             <label for="kerbWidth">Kerb Width</label>
-                            <input type="number" id="kerbWidth" min="2" max="35" value="15">
+                            <input type="number" id="kerbWidth" min="2" max="35" value="12">
                         </div>
                         <div class="form-group">
                             <label for="kerbDashLength">Kerb Dash Length</label>
-                            <input type="number" id="kerbDashLength" min="5" max="30" value="20">
+                            <input type="number" id="kerbDashLength" min="5" max="30" value="15">
                         </div>
                         <div class="form-group">
                             <label for="kerbGapLength">Kerb Gap Length</label>
-                            <input type="number" id="kerbGapLength" min="5" max="30" value="20">
+                            <input type="number" id="kerbGapLength" min="5" max="30" value="10">
                         </div>
                     </div>
                     
@@ -873,7 +869,7 @@
                         <h3>White Lines</h3>
                         <div class="form-group">
                             <label for="whiteLineWidth">White Line Width</label>
-                            <input type="number" id="whiteLineWidth" min="2" max="50" value="20">
+                            <input type="number" id="whiteLineWidth" min="2" max="50" value="12">
                         </div>
                     </div>
                     
@@ -911,10 +907,6 @@
                             <label for="kerbRedColor">Kerb Red</label>
                             <input type="color" id="kerbRedColor" value="#9f1717">
                         </div>
-                        <div class="form-group">
-                            <label for="debugTextColor">Debug Text</label>
-                            <input type="color" id="debugTextColor" value="#ff0000">
-                        </div>
                     </div>
                     
                     <div class="settings-buttons">
@@ -943,6 +935,10 @@
                     <span class="section-toggle">▼</span>
                 </div>
                 <div class="section-content">
+                    <div class="form-group">
+                        <label for="exportWidth">PNG Width (px)</label>
+                        <input type="number" id="exportWidth" value="4000" min="500" max="16000" step="500">
+                    </div>
                     <button class="btn success" id="exportPNG">
                         <span>📷</span>
                         Export PNG
@@ -1001,7 +997,7 @@
             <div class="canvas-overlay">
                 <div class="canvas-control">
                     <span>🔍</span>
-                    Zoom: 100%
+                    <span id="zoomLevel">Zoom: 100%</span>
                 </div>
                 <div class="canvas-control" id="coordinatesDisplay" style="display: none;">
                     <span>📍</span>
