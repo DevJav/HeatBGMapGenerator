@@ -53,6 +53,7 @@ class HeatTrackGenerator {
 
         this.initializeEventListeners();
         this.setupSVGInteraction();
+        this.setMode(this.currentMode);
 
         // Restore the previous session once the sign images are embedded, so the
         // first render (and any immediate export) already uses the data URIs
@@ -65,9 +66,21 @@ class HeatTrackGenerator {
         const fileInput = document.getElementById('fileInput');
         
         fileUpload.addEventListener('click', () => fileInput.click());
-        fileUpload.addEventListener('dragover', this.handleDragOver.bind(this));
-        fileUpload.addEventListener('drop', this.handleDrop.bind(this));
         fileInput.addEventListener('change', this.handleFileSelect.bind(this));
+        
+        // SVGs can be dropped on the upload box or anywhere on the canvas
+        [fileUpload, document.getElementById('canvasArea')].forEach(dropTarget => {
+            dropTarget.addEventListener('dragover', this.handleDragOver.bind(this));
+            dropTarget.addEventListener('dragleave', this.handleDragLeave.bind(this));
+            dropTarget.addEventListener('drop', this.handleDrop.bind(this));
+        });
+        
+        // Example tracks
+        document.querySelectorAll('[data-example]').forEach(button => {
+            button.addEventListener('click', () => this.loadExampleTrack(button.dataset.example));
+        });
+        
+        document.getElementById('fitView').addEventListener('click', () => this.fitView());
 
         // Generate button
         document.getElementById('generateBtn').addEventListener('click', this.generateTrack.bind(this));
@@ -129,7 +142,6 @@ class HeatTrackGenerator {
         document.getElementById('centerlineColor').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('whiteLineColor').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('segmentNumberColor').addEventListener('change', this.onVisualSettingChange.bind(this));
-        document.getElementById('speedLimitColor').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('kerbWhiteColor').addEventListener('change', this.onVisualSettingChange.bind(this));
         document.getElementById('kerbRedColor').addEventListener('change', this.onVisualSettingChange.bind(this));
         
@@ -202,6 +214,13 @@ class HeatTrackGenerator {
         e.currentTarget.classList.add('dragover');
     }
 
+    handleDragLeave(e) {
+        // Ignore dragleave events caused by moving over child elements
+        if (!e.currentTarget.contains(e.relatedTarget)) {
+            e.currentTarget.classList.remove('dragover');
+        }
+    }
+
     handleDrop(e) {
         e.preventDefault();
         e.currentTarget.classList.remove('dragover');
@@ -219,9 +238,13 @@ class HeatTrackGenerator {
         }
     }
 
-    async loadSVGFile(file) {
+    async loadSVGFile(file, { confirmed = false } = {}) {
         if (!file.name.toLowerCase().endsWith('.svg')) {
             this.showStatus('Please select an SVG file', 'error');
+            return;
+        }
+
+        if (!confirmed && !this.confirmDiscardEdits('Loading a new SVG')) {
             return;
         }
 
@@ -229,12 +252,37 @@ class HeatTrackGenerator {
             const svgContent = await this.readFileAsText(file);
             this.parseSVGCenterline(svgContent);
             
-            document.getElementById('fileName').textContent = `📄 ${file.name}`;
+            document.getElementById('fileName').textContent = `Loaded: ${file.name}`;
             document.getElementById('generateBtn').disabled = false;
             this.showStatus(`File loaded: ${file.name}`, 'success');
         } catch (error) {
             this.showStatus('Error loading SVG: ' + error.message, 'error');
         }
+    }
+
+    async loadExampleTrack(url) {
+        if (this.trackData && !confirm('Replace the current track with this example?')) return;
+        
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const file = new File([await response.blob()], url.split('/').pop(), { type: 'image/svg+xml' });
+            // Already confirmed above, so don't ask again while loading
+            await this.loadSVGFile(file, { confirmed: true });
+            if (this.centerlinePoints && !this.trackData) this.generateTrack();
+        } catch (error) {
+            this.showStatus('Could not load example: ' + error.message, 'error');
+        }
+    }
+
+    // Re-center and re-scale the view on the whole track
+    fitView() {
+        if (this.trackData) {
+            this.renderTrack();
+        } else if (this.centerlinePoints) {
+            this.showCenterlinePreview();
+        }
+        this.debouncedSaveSession();
     }
 
     readFileAsText(file) {
@@ -314,8 +362,6 @@ class HeatTrackGenerator {
         const existingTrack = svg.querySelector('#trackGroup');
         if (existingTrack) existingTrack.remove();
         
-        const placeholderText = svg.querySelector('text');
-        if (placeholderText) placeholderText.remove();
 
         // Create preview group
         const previewGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -363,16 +409,22 @@ class HeatTrackGenerator {
         this.applyViewTransform();
     }
 
+    // Returns true if a track was generated, false if there was nothing to do or the user cancelled
     generateTrack() {
         if (!this.centerlinePoints) {
             this.showStatus('Please load an SVG file first', 'error');
-            return;
+            return false;
+        }
+        
+        if (!this.confirmDiscardEdits('Regenerating the track')) {
+            return false;
         }
 
         const trackWidth = parseFloat(document.getElementById('trackWidth').value);
         const segmentLength = parseFloat(document.getElementById('segmentLength').value);
 
         this.showLoading(true);
+        let generated = false;
 
         try {
             // Generate track borders
@@ -401,11 +453,13 @@ class HeatTrackGenerator {
             this.saveSession();
             
             this.showStatus('Track generated successfully!', 'success');
+            generated = true;
         } catch (error) {
             this.showStatus('Generation failed: ' + error.message, 'error');
         }
 
         this.showLoading(false);
+        return generated;
     }
 
     generateTrackBorders(trackWidth) {
@@ -666,8 +720,6 @@ class HeatTrackGenerator {
         const existingTrack = svg.querySelector('#trackGroup');
         if (existingTrack) existingTrack.remove();
         
-        const placeholderText = svg.querySelector('text');
-        if (placeholderText) placeholderText.remove();
 
         // Create main group
         const trackGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -1423,10 +1475,47 @@ class HeatTrackGenerator {
         }
     }
 
-    onSettingChange() {
-        if (this.trackData && this.centerlinePoints) {
-            this.generateTrack();
+    onSettingChange(e) {
+        if (!this.trackData || !this.centerlinePoints) return;
+        
+        if (e.target.id === 'trackWidth') {
+            // Width doesn't move the spaces, so redraw the edges and keep all edits
+            const trackWidth = parseFloat(e.target.value);
+            if (!(trackWidth > 0)) {
+                e.target.value = this.trackData.track_width;
+                return;
+            }
+            this.generateTrackBorders(trackWidth);
+            this.trackData.track_width = trackWidth;
+            this.trackData.left_border = this.leftBorderPoints;
+            this.trackData.right_border = this.rightBorderPoints;
+            this.renderTrack(true);
+            this.saveSession();
+            return;
         }
+        
+        // A new space length rebuilds the spaces; restore the old value if the user keeps their edits
+        if (!this.generateTrack()) {
+            e.target.value = this.trackData.segment_length;
+        }
+    }
+
+    // Record that the user changed the generated track, then persist it
+    markEdited() {
+        if (this.trackData) this.trackData.edited = true;
+        this.saveSession();
+    }
+
+    // Edits are flagged explicitly; curves/kerbs also count for tracks saved before the flag existed
+    hasUserEdits() {
+        if (!this.trackData) return false;
+        return Boolean(this.trackData.edited) ||
+            this.trackData.segments.some(s => s.is_curve || s.has_kerb);
+    }
+
+    confirmDiscardEdits(action) {
+        return !this.hasUserEdits() ||
+            confirm(`${action} will discard your curves, kerbs, lines and moved spaces. Continue?\n\nTip: use "Save track" first to keep a copy.`);
     }
 
     // Mode and interaction methods
@@ -1434,10 +1523,9 @@ class HeatTrackGenerator {
         this.currentMode = mode;
         
         // Update button states
-        document.querySelectorAll('.toolbar .btn').forEach(btn => {
-            btn.style.opacity = '0.7';
+        document.querySelectorAll('.tool-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.id === `${mode}Mode`);
         });
-        document.getElementById(`${mode}Mode`).style.opacity = '1';
         
         // Show/hide controls
         document.getElementById('curveControls').style.display = mode === 'curve' ? 'block' : 'none';
@@ -1600,7 +1688,7 @@ class HeatTrackGenerator {
         this.renderTrack(true); // preserve view
         
         // Save session after curve changes
-        this.saveSession();
+        this.markEdited();
         
         this.showStatus(`Segment ${segmentId} ${segment.is_curve ? 'marked as curve' : 'unmarked as curve'}`, 'success');
     }
@@ -1657,7 +1745,7 @@ class HeatTrackGenerator {
         this.renderTrack(true); // Preserve view when toggling kerb
         
         // Save session after kerb changes
-        this.saveSession();
+        this.markEdited();
     }
 
     handleNumberSideToggle(element) {
@@ -1699,7 +1787,7 @@ class HeatTrackGenerator {
         this.renderTrack(true); // preserve view
         
         // Save session after changes
-        this.saveSession();
+        this.markEdited();
         
         this.showStatus(`${updatedCount} numbers pointing to curve ${targetCurveSegment.segment_number} moved to ${newSide} side`, 'success');
     }
@@ -1728,7 +1816,7 @@ class HeatTrackGenerator {
         this.renderTrack(true); // preserve view
         
         // Save session after changes
-        this.saveSession();
+        this.markEdited();
         
         this.showStatus(`Speed limit for curve ${segmentId} moved to ${newSide} side`, 'success');
     }
@@ -1890,7 +1978,7 @@ class HeatTrackGenerator {
         this.renderTrack(true); // Preserve view when moving segments
         
         // Save session after segment movement
-        this.saveSession();
+        this.markEdited();
         
         this.showStatus(`Segment ${segmentId} moved - adjacent segments updated`, 'success');
     }
@@ -1979,7 +2067,7 @@ class HeatTrackGenerator {
         this.renderTrack(true); // Preserve view when toggling white lines
         
         // Save session after white line changes
-        this.saveSession();
+        this.markEdited();
         
         this.showStatus(`${updatedCount} segments pointing to curve ${targetCurveSegment.segment_number}: ${actionDescription}`, 'success');
     }

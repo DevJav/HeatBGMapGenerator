@@ -3,1106 +3,1064 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Heat: Pedal to the Metal - Track Generator</title>
+    <title>Heat Track Builder</title>
+    <meta name="description" content="Build custom tracks for the board game Heat: Pedal to the Metal from an SVG centerline.">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏁</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;1,800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root {
+            --paper: #f4ecda;
+            --paper-2: #ebe0c7;
+            --paper-3: #e0d2b4;
+            --ink: #1f1b16;
+            --ink-2: #5c5244;
+            --ink-3: #8a7e6c;
+            --line: #d4c5a6;
+            --red: #c63a2b;
+            --red-dark: #a12c1f;
+            --teal: #1f6f6f;
+            --teal-light: #d5e6e1;
+            --mustard: #e0a43a;
+            --asphalt: #2a2724;
+            --asphalt-grid: #34302c;
+            --rail: #1f1b16;
+
+            --font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+            --font-body: 'Barlow', 'Segoe UI', Arial, sans-serif;
+
+            --header-h: 56px;
+            --rail-w: 76px;
+            --panel-w: 340px;
+            --radius: 6px;
         }
 
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
-            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #1a1a1a;
-            min-height: 100vh;
-            color: #f0f0f0;
+            font-family: var(--font-body);
+            font-size: 14px;
+            background: var(--paper);
+            color: var(--ink);
+            height: 100vh;
             overflow: hidden;
         }
 
-        .container {
+        button, input { font: inherit; color: inherit; }
+
+        .app {
             display: grid;
-            grid-template-areas: 
-                "header header"
-                "sidebar main";
-            grid-template-rows: auto 1fr;
-            grid-template-columns: 320px 1fr;
+            grid-template-columns: var(--rail-w) 1fr var(--panel-w);
+            grid-template-rows: var(--header-h) 1fr;
+            grid-template-areas:
+                "header header header"
+                "rail   canvas panel";
             height: 100vh;
-            transition: grid-template-columns 0.3s ease;
         }
 
-        .container.sidebar-collapsed {
-            grid-template-columns: 60px 1fr;
-        }
-
-        .top-header {
+        /* ---------- Header ---------- */
+        .header {
             grid-area: header;
-            background: rgba(30, 30, 30, 0.95);
-            backdrop-filter: blur(20px);
-            border-bottom: 1px solid #3a3a3a;
-            padding: 12px 20px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            z-index: 100;
-        }
-
-        .header-left {
-            display: flex;
-            align-items: center;
             gap: 16px;
+            padding: 0 16px 0 0;
+            background: var(--ink);
+            color: var(--paper);
+            position: relative;
+            z-index: 30;
         }
 
-        .logo {
+        /* Vintage livery stripe under the header */
+        .header::after {
+            content: '';
+            position: absolute;
+            left: 0; right: 0; bottom: -6px;
+            height: 6px;
+            background: linear-gradient(to bottom, var(--red) 0 3px, var(--mustard) 3px 6px);
+        }
+
+        .brand {
             display: flex;
             align-items: center;
-            gap: 8px;
-            color: #ff6b47;
+            gap: 12px;
+            height: 100%;
+        }
+
+        .brand-mark {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: var(--rail-w);
+            height: 100%;
+            background: var(--red);
+            font-family: var(--font-display);
+            font-style: italic;
+            font-weight: 800;
+            font-size: 26px;
+            letter-spacing: 1px;
+            color: var(--paper);
+        }
+
+        .brand-title {
+            font-family: var(--font-display);
             font-weight: 700;
-            font-size: 18px;
+            font-size: 20px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
         }
 
-        .sidebar-toggle {
-            background: none;
-            border: none;
-            color: #9ca3af;
-            cursor: pointer;
-            padding: 8px;
-            border-radius: 6px;
-            transition: all 0.2s ease;
-        }
-
-        .sidebar-toggle:hover {
-            background: #2a2a2a;
-            color: #e5e5e5;
+        .brand-sub {
+            font-size: 12px;
+            color: var(--ink-3);
+            margin-left: 4px;
         }
 
         .header-actions {
             display: flex;
             align-items: center;
-            gap: 12px;
-            position: relative;
+            gap: 8px;
         }
 
-        .export-dropdown {
-            position: relative;
+        .header-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            height: 36px;
+            padding: 0 14px;
+            border: 1px solid #4a4238;
+            border-radius: var(--radius);
+            background: transparent;
+            color: var(--paper);
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 15px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
         }
 
-        .export-menu {
+        .header-btn:hover { background: #2f2923; border-color: #6a5f50; }
+        .header-btn.primary { background: var(--red); border-color: var(--red); }
+        .header-btn.primary:hover { background: var(--red-dark); border-color: var(--red-dark); }
+        .header-btn svg { width: 18px; height: 18px; }
+
+        .panel-toggle { display: none; }
+
+        .dropdown { position: relative; }
+
+        .dropdown-menu {
             position: absolute;
-            top: calc(100% + 8px);
             right: 0;
-            background: rgba(30, 30, 30, 0.95);
-            backdrop-filter: blur(20px);
-            border: 1px solid #4a4a4a;
-            border-radius: 8px;
-            min-width: 160px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            z-index: 200;
+            top: calc(100% + 8px);
+            min-width: 200px;
+            padding: 6px;
+            background: var(--paper);
+            color: var(--ink);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            box-shadow: 0 10px 30px rgba(31, 27, 22, 0.25);
             display: none;
         }
 
-        .export-menu.show {
-            display: block;
-        }
+        .dropdown-menu.show { display: block; }
 
-        .export-menu-item {
+        .dropdown-item {
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 12px 16px;
-            color: #f0f0f0;
-            text-decoration: none;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background 0.2s ease;
-            border: none;
-            background: none;
+            gap: 10px;
             width: 100%;
+            padding: 9px 10px;
+            border: none;
+            border-radius: 4px;
+            background: none;
             text-align: left;
-        }
-
-        .export-menu-item:hover {
-            background: rgba(60, 60, 60, 0.5);
-        }
-
-        .export-menu-item:first-child {
-            border-radius: 8px 8px 0 0;
-        }
-
-        .export-menu-item:last-child {
-            border-radius: 0 0 8px 8px;
-        }
-
-        .export-menu-item:first-child:last-child {
-            border-radius: 8px;
-        }
-
-        .quick-action {
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            color: #e5e5e5;
-            padding: 8px 16px;
-            border-radius: 8px;
             cursor: pointer;
-            font-size: 14px;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            gap: 6px;
         }
 
-        .quick-action:hover {
-            background: #2a2a2a;
-            border-color: #3a3a3a;
-        }
+        .dropdown-item:hover { background: var(--paper-2); }
+        .dropdown-item svg { width: 16px; height: 16px; color: var(--ink-2); }
 
-        .quick-action.primary {
-            background: #ff6b47;
-            border-color: #ff6b47;
-            color: white;
-        }
-
-        .quick-action.primary:hover {
-            background: #e55a3a;
-        }
-
-        .sidebar {
-            grid-area: sidebar;
-            background: rgba(30, 30, 30, 0.95);
-            backdrop-filter: blur(20px);
-            border-right: 1px solid #3a3a3a;
-            overflow-y: auto;
-            overflow-x: hidden;
+        /* ---------- Tool rail ---------- */
+        .rail {
+            grid-area: rail;
             display: flex;
             flex-direction: column;
-            transition: all 0.3s ease;
+            align-items: center;
+            gap: 4px;
+            padding: 18px 8px 12px;
+            background: var(--rail);
+            z-index: 20;
         }
 
-        .sidebar.collapsed {
+        .tool-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
             width: 60px;
-        }
-
-        .sidebar.collapsed .section-content {
-            display: none;
-        }
-
-        .sidebar.collapsed .section-header h2 {
-            display: none;
-        }
-
-        .section {
-            margin-bottom: 2px;
-            border-bottom: 1px solid #3a3a3a;
-        }
-
-        .section-header {
-            padding: 16px 20px;
+            padding: 9px 0 7px;
+            border: none;
+            border-radius: var(--radius);
+            background: transparent;
+            color: #bfb39e;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            transition: background 0.2s ease;
-            user-select: none;
+            transition: background 0.15s, color 0.15s;
         }
 
-        .section-header:hover {
-            background: rgba(60, 60, 60, 0.5);
-        }
+        .tool-btn svg { width: 22px; height: 22px; }
 
-        .section-header h2 {
-            color: #e5e5e5;
-            font-size: 15px;
+        .tool-btn span {
+            font-family: var(--font-display);
             font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .section-icon {
-            color: #ff6b47;
-            font-size: 16px;
-        }
-
-        .section-toggle {
-            color: #9ca3af;
-            transition: transform 0.2s ease;
-        }
-
-        .section.collapsed .section-toggle {
-            transform: rotate(-90deg);
-        }
-
-        .section-content {
-            padding: 0 20px 20px 20px;
-            transition: all 0.3s ease;
-        }
-
-        .section.collapsed .section-content {
-            display: none;
-        }
-
-        .form-group {
-            margin-bottom: 16px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 6px;
-            font-weight: 500;
-            color: #9ca3af;
-            font-size: 13px;
+            font-size: 12px;
+            letter-spacing: 1px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
         }
 
-        .form-group input,
-        .form-group select {
-            width: 100%;
-            padding: 10px 12px;
-            background: #2a2a2a;
-            border: 1px solid #4a4a4a;
-            border-radius: 8px;
-            color: #f0f0f0;
-            font-size: 14px;
-            transition: all 0.2s ease;
+        .tool-btn:hover { background: #2f2923; color: var(--paper); }
+        .tool-btn.active { background: var(--red); color: var(--paper); }
+
+        .rail-divider {
+            width: 36px;
+            height: 1px;
+            margin: 8px 0;
+            background: #3a332b;
         }
 
-        .form-group input:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: #ff6b47;
-            box-shadow: 0 0 0 3px rgba(255, 107, 71, 0.1);
-        }
+        .rail-spacer { flex: 1; }
 
-        .form-group input[type="color"] {
-            height: 40px;
-            cursor: pointer;
-        }
-
-        .btn {
-            background: #3a3a3a;
-            color: #f0f0f0;
-            border: 1px solid #4a4a4a;
-            padding: 10px 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.2s ease;
-            width: 100%;
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-        }
-
-        .btn:hover {
-            background: #4a4a4a;
-            border-color: #5a5a5a;
-        }
-
-        .btn:disabled {
-            background: #2a2a2a;
-            color: #7a7a7a;
-            cursor: not-allowed;
-            border-color: #3a3a3a;
-        }
-
-        .btn.primary {
-            background: #ff6b47;
-            border-color: #ff6b47;
-            color: white;
-        }
-
-        .btn.primary:hover {
-            background: #e55a3a;
-        }
-
-        .btn.secondary {
-            background: #4f46e5;
-            border-color: #4f46e5;
-            color: white;
-        }
-
-        .btn.secondary:hover {
-            background: #4338ca;
-        }
-
-        .btn.success {
-            background: #10b981;
-            border-color: #10b981;
-            color: white;
-        }
-
-        .btn.success:hover {
-            background: #059669;
-        }
-
-        .btn.warning {
-            background: #f59e0b;
-            border-color: #f59e0b;
-            color: white;
-        }
-
-        .btn.warning:hover {
-            background: #d97706;
-        }
-
-        .btn.danger {
-            background: #ef4444;
-            border-color: #ef4444;
-            color: white;
-        }
-
-        .btn.danger:hover {
-            background: #dc2626;
-        }
-
-        .btn.active {
-            background: #ff6b47;
-            border-color: #ff6b47;
-            color: white;
-        }
-
-        .toolbar {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-bottom: 16px;
-        }
-
-        .toolbar .btn {
-            margin-bottom: 0;
-            font-size: 13px;
-            padding: 8px 12px;
-        }
-
-        .main-content {
-            grid-area: main;
+        /* ---------- Canvas ---------- */
+        .canvas-area {
+            grid-area: canvas;
             position: relative;
-            background: #222;
             overflow: hidden;
-        }
-
-        .canvas-container {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            padding: 20px;
+            background: var(--asphalt);
         }
 
         #trackCanvas {
-            width: calc(100% - 40px);
-            height: calc(100% - 40px);
-            min-width: 800px;
-            min-height: 600px;
-            border: 1px solid #4a4a4a;
-            background: #1a1a1a;
-            border-radius: 8px;
+            display: block;
+            width: 100%;
+            height: 100%;
             touch-action: none; /* Let pointer events handle pan/drag on touch screens */
         }
 
-        .canvas-overlay {
+        .canvas-area.dragover::after {
+            content: 'Drop SVG to load';
             position: absolute;
-            top: 20px;
-            right: 20px;
+            inset: 16px;
             display: flex;
-            flex-direction: column;
-            gap: 8px;
+            align-items: center;
+            justify-content: center;
+            border: 3px dashed var(--mustard);
+            border-radius: 12px;
+            background: rgba(42, 39, 36, 0.8);
+            color: var(--paper);
+            font-family: var(--font-display);
+            font-size: 28px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            pointer-events: none;
         }
 
-        .canvas-control {
-            background: rgba(30, 30, 30, 0.9);
-            backdrop-filter: blur(10px);
-            border: 1px solid #4a4a4a;
-            border-radius: 8px;
-            padding: 8px 12px;
-            color: #b0b0b0;
+        .empty-state {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            padding: 24px;
+            text-align: center;
+            color: var(--paper);
+            pointer-events: none;
+        }
+
+        /* Hide the empty state as soon as a centerline or track is drawn */
+        .canvas-area:has(#trackGroup) .empty-state { display: none; }
+
+        .empty-state > * { pointer-events: auto; }
+
+        .empty-title {
+            font-family: var(--font-display);
+            font-style: italic;
+            font-weight: 800;
+            font-size: 44px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            line-height: 1;
+        }
+
+        .empty-title em { color: var(--mustard); font-style: inherit; }
+
+        .empty-text {
+            max-width: 420px;
+            color: #c9bda8;
+            line-height: 1.5;
+        }
+
+        .examples {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            color: var(--ink-3);
+            font-size: 13px;
+        }
+
+        .chip-btn {
+            padding: 5px 12px;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            background: transparent;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+
+        .chip-btn:hover { background: var(--paper-2); }
+
+        .empty-state .chip-btn { border-color: #5a5045; color: var(--paper); }
+        .empty-state .chip-btn:hover { background: #3a342e; }
+
+        /* Current tool's instructions: one quiet line in the bottom bar */
+        .mode-hint {
+            max-width: min(560px, calc(100vw - var(--rail-w) - var(--panel-w) - 140px));
+            padding: 0 10px;
+            border-left: 1px solid #4a4238;
+            color: #b5a993;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .mode-hint strong {
+            margin-right: 6px;
+            font-family: var(--font-display);
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--mustard);
+        }
+
+        .view-controls {
+            position: absolute;
+            left: 16px;
+            bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            padding: 3px;
+            background: rgba(31, 27, 22, 0.85);
+            border-radius: var(--radius);
+            color: var(--paper);
             font-size: 12px;
+            z-index: 5;
+        }
+
+        .view-controls #zoomLevel { padding: 0 10px; font-variant-numeric: tabular-nums; }
+
+        .view-controls button {
             display: flex;
             align-items: center;
             gap: 6px;
+            padding: 6px 10px;
+            border: none;
+            border-radius: 4px;
+            background: transparent;
+            cursor: pointer;
         }
 
+        .view-controls button:hover { background: #3a342e; }
+        .view-controls svg { width: 15px; height: 15px; }
+
+        /* ---------- Side panel ---------- */
+        .panel {
+            grid-area: panel;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            background: var(--paper);
+            border-left: 1px solid var(--line);
+            z-index: 20;
+        }
+
+        .tabs {
+            display: flex;
+            padding: 14px 16px 0;
+            gap: 4px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .tab {
+            flex: 1;
+            padding: 8px 0 10px;
+            border: none;
+            border-bottom: 3px solid transparent;
+            background: none;
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 15px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--ink-3);
+            cursor: pointer;
+        }
+
+        .tab:hover { color: var(--ink); }
+        .tab.active { color: var(--ink); border-bottom-color: var(--red); }
+
+        .tab-panel {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+            padding: 18px 16px 24px;
+        }
+
+        .tab-panel.active { display: block; }
+
+        .panel-section + .panel-section { margin-top: 22px; }
+
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 14px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--ink-2);
+        }
+
+        .step-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--ink);
+            color: var(--paper);
+            font-size: 12px;
+            letter-spacing: 0;
+        }
+
+        .muted { color: var(--ink-3); font-size: 12px; line-height: 1.5; }
+
+        .file-upload {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            padding: 20px 12px;
+            border: 2px dashed var(--line);
+            border-radius: var(--radius);
+            background: var(--paper-2);
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+        }
+
+        .file-upload:hover, .file-upload.dragover { border-color: var(--red); background: var(--paper-3); }
+        .file-upload svg { width: 26px; height: 26px; color: var(--red); margin-bottom: 4px; }
+        .file-upload-text { font-weight: 600; }
+
+        #fileName:not(:empty) {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--teal);
+            font-weight: 600;
+        }
+
+        .panel .examples { justify-content: flex-start; margin-top: 10px; }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 12px;
+        }
+
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+
+        .form-group label {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--ink-2);
+        }
+
+        input[type="number"] {
+            width: 100%;
+            height: 34px;
+            padding: 0 10px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: #fffaf0;
+            font-variant-numeric: tabular-nums;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: var(--teal);
+            box-shadow: 0 0 0 3px var(--teal-light);
+        }
+
+        .color-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px 12px;
+        }
+
+        .color-field {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--ink-2);
+            cursor: pointer;
+        }
+
+        input[type="color"] {
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            border: 1px solid var(--line);
+            border-radius: 50%;
+            background: none;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+        input[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; }
+        input[type="color"]::-moz-color-swatch { border: none; border-radius: 50%; }
+
+        details.settings-group {
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: #fbf5e8;
+        }
+
+        details.settings-group + details.settings-group { margin-top: 8px; }
+
+        details.settings-group summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 14px;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            cursor: pointer;
+            list-style: none;
+        }
+
+        details.settings-group summary::-webkit-details-marker { display: none; }
+
+        details.settings-group summary::after {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-right: 2px solid var(--ink-3);
+            border-bottom: 2px solid var(--ink-3);
+            transform: rotate(-45deg);
+            transition: transform 0.15s;
+        }
+
+        details.settings-group[open] summary::after { transform: rotate(45deg); }
+
+        .settings-body { padding: 4px 12px 14px; }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            height: 40px;
+            padding: 0 14px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: #fffaf0;
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 15px;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s, transform 0.05s;
+        }
+
+        .btn:hover { background: var(--paper-2); }
+        .btn:active { transform: translateY(1px); }
+        .btn svg { width: 17px; height: 17px; }
+
+        .btn.primary { background: var(--red); border-color: var(--red); color: var(--paper); }
+        .btn.primary:hover { background: var(--red-dark); border-color: var(--red-dark); }
+        .btn.teal { background: var(--teal); border-color: var(--teal); color: var(--paper); }
+        .btn.teal:hover { background: #185a5a; }
+        .btn.danger { color: var(--red); border-color: #e2b3a9; background: transparent; }
+        .btn.danger:hover { background: #f6e0d8; }
+        .btn.small { height: 34px; font-size: 13px; }
+
+        .btn-row { display: flex; gap: 8px; }
+        .btn-stack { display: flex; flex-direction: column; gap: 8px; }
+        .form-grid + .btn, .form-group + .btn-stack, .settings-actions { margin-top: 14px; }
+
+        .tool-guide {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 8px 10px;
+            font-size: 13px;
+            color: var(--ink-2);
+            line-height: 1.4;
+        }
+
+        .tool-guide b {
+            font-family: var(--font-display);
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--ink);
+        }
+
+        /* ---------- Status & loading ---------- */
         .status {
             position: fixed;
-            top: 20px;
             left: 50%;
+            bottom: 24px;
             transform: translateX(-50%);
-            padding: 12px 20px;
-            border-radius: 8px;
-            color: white;
+            max-width: calc(100% - 32px);
+            padding: 10px 18px 10px 14px;
+            border-left: 5px solid var(--teal);
+            border-radius: var(--radius);
+            background: var(--ink);
+            color: var(--paper);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
             font-weight: 500;
-            z-index: 1000;
+            z-index: 100;
             display: none;
-            backdrop-filter: blur(10px);
         }
 
-        .status.success {
-            background: rgba(16, 185, 129, 0.9);
-            border: 1px solid #10b981;
-        }
-
-        .status.error {
-            background: rgba(239, 68, 68, 0.9);
-            border: 1px solid #ef4444;
-        }
-
-        .status.info {
-            background: rgba(59, 130, 246, 0.9);
-            border: 1px solid #3b82f6;
-        }
+        .status.success { border-left-color: var(--teal); }
+        .status.warning { border-left-color: var(--mustard); }
+        .status.error { border-left-color: var(--red); }
 
         .loading {
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(30, 30, 30, 0.95);
-            backdrop-filter: blur(20px);
-            border: 1px solid #4a4a4a;
-            padding: 30px;
-            border-radius: 12px;
+            padding: 22px 32px;
+            border-radius: 10px;
+            background: var(--paper);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
             text-align: center;
-            z-index: 1000;
+            font-family: var(--font-display);
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            z-index: 200;
             display: none;
         }
 
         .spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid #4a4a4a;
-            border-top: 3px solid #ff6b47;
+            width: 34px;
+            height: 34px;
+            margin: 0 auto 12px;
+            border: 4px solid var(--paper-3);
+            border-top-color: var(--red);
             border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 15px;
+            animation: spin 0.8s linear infinite;
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
-        .file-upload {
-            border: 2px dashed #5a5a5a;
-            border-radius: 12px;
-            padding: 30px 20px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            background: rgba(40, 40, 40, 0.5);
-            position: relative;
-        }
+        /* ---------- Track editing feedback ---------- */
+        .segment-number.draggable { cursor: move !important; }
+        .segment-being-dragged { opacity: 0.5 !important; }
+        #dragPreview { pointer-events: none; }
 
-        .file-upload:hover {
-            border-color: #ff6b47;
-            background: rgba(255, 107, 71, 0.05);
-        }
+        /* ---------- Responsive ---------- */
+        @media (max-width: 900px) {
+            :root { --rail-w: 64px; }
 
-        .file-upload.dragover {
-            border-color: #ff6b47;
-            background: rgba(255, 107, 71, 0.1);
-            transform: scale(1.02);
-        }
-
-        .file-upload-icon {
-            font-size: 24px;
-            color: #6b7280;
-            margin-bottom: 8px;
-        }
-
-        .file-upload-text {
-            color: #9ca3af;
-            font-size: 14px;
-            margin-bottom: 4px;
-        }
-
-        .file-upload-subtext {
-            color: #6b7280;
-            font-size: 12px;
-        }
-
-        .curve-controls {
-            margin-top: 16px;
-            padding: 16px;
-            background: rgba(40, 40, 40, 0.5);
-            border-radius: 8px;
-            border-left: 3px solid #ff6b47;
-        }
-
-        .curve-controls p {
-            font-size: 12px;
-            color: #9ca3af;
-            line-height: 1.5;
-        }
-
-        .settings-group {
-            margin-bottom: 20px;
-            padding: 16px;
-            background: rgba(40, 40, 40, 0.5);
-            border-radius: 8px;
-            border: 1px solid #4a4a4a;
-        }
-
-        .settings-group h3 {
-            margin: 0 0 12px 0;
-            color: #e5e5e5;
-            font-size: 14px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .settings-buttons {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 8px;
-        }
-
-        .settings-buttons .btn {
-            font-size: 12px;
-            padding: 8px 12px;
-        }
-
-        /* Responsive design */
-        @media (max-width: 768px) {
-            .container {
-                grid-template-areas: 
-                    "header"
-                    "main";
-                grid-template-columns: 1fr;
-                grid-template-rows: auto 1fr;
+            .app {
+                grid-template-columns: var(--rail-w) 1fr;
+                grid-template-areas:
+                    "header header"
+                    "rail   canvas";
             }
 
-            .sidebar {
+            .brand-sub, .header-btn .label { display: none; }
+            .panel-toggle { display: inline-flex; }
+
+            .panel {
                 position: fixed;
-                top: 0;
-                left: -320px;
-                height: 100vh;
-                z-index: 200;
-                transition: left 0.3s ease;
-            }
-
-            .sidebar.mobile-open {
-                left: 0;
-            }
-
-            .mobile-overlay {
-                position: fixed;
-                top: 0;
-                left: 0;
+                top: calc(var(--header-h) + 6px);
                 right: 0;
                 bottom: 0;
-                background: rgba(0, 0, 0, 0.5);
-                z-index: 150;
-                display: none;
+                width: min(var(--panel-w), 100vw);
+                transform: translateX(100%);
+                transition: transform 0.2s ease;
+                box-shadow: -10px 0 30px rgba(0, 0, 0, 0.3);
             }
 
-            .mobile-overlay.active {
-                display: block;
-            }
+            .panel.open { transform: none; }
+
+            .tool-btn { width: 52px; }
+            .empty-title { font-size: 34px; }
         }
 
-        /* Scrollbar styling */
-        .sidebar::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .sidebar::-webkit-scrollbar-track {
-            background: #1a1a1a;
-        }
-
-        .sidebar::-webkit-scrollbar-thumb {
-            background: #3a3a3a;
-            border-radius: 3px;
-        }
-
-        .sidebar::-webkit-scrollbar-thumb:hover {
-            background: #4a4a4a;
-        }
-        /* Edit mode styles */
-        .segment-number.draggable {
-            cursor: move !important;
-            transition: all 0.2s ease;
-        }
-
-        .segment-being-dragged {
-            opacity: 0.5 !important;
-        }
-
-        #dragPreview {
-            pointer-events: none;
+        @media (max-width: 520px) {
+            .brand-title { font-size: 15px; letter-spacing: 1px; white-space: nowrap; }
+            .header-actions { gap: 6px; }
+            .header-btn { padding: 0 10px; }
         }
     </style>
 </head>
 <body>
-    <div class="container" id="container">
-        <div class="top-header">
-            <div class="header-left">
-                <button class="sidebar-toggle" id="sidebarToggle">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                    </svg>
-                </button>
-                <div class="logo">
-                    <span>🏁</span>
-                    Heat Track Generator
-                </div>
+    <div class="app">
+        <header class="header">
+            <div class="brand">
+                <div class="brand-mark">HEAT</div>
+                <div class="brand-title">Track Builder</div>
+                <div class="brand-sub">for Heat: Pedal to the Metal</div>
             </div>
             <div class="header-actions">
-                <div class="export-dropdown">
-                    <button class="quick-action" id="exportDropdownBtn">
-                        <span>📤</span>
-                        Export
-                        <span>▼</span>
+                <button class="header-btn" id="headerLoad" title="Load a saved track (.json)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                    <span class="label">Open</span>
+                </button>
+                <button class="header-btn" id="headerSave" title="Save track as .json">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M7 3v5h8V3M7 21v-7h10v7"/></svg>
+                    <span class="label">Save</span>
+                </button>
+                <div class="dropdown">
+                    <button class="header-btn primary" id="exportDropdownBtn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7 8l5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
+                        <span class="label">Export</span>
                     </button>
-                    <div class="export-menu" id="exportMenu">
-                        <button class="export-menu-item" id="exportPNGFromMenu">
-                            <span>📷</span>
-                            Export PNG
+                    <div class="dropdown-menu" id="exportMenu">
+                        <button class="dropdown-item" id="exportPNGFromMenu">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>
+                            PNG image
                         </button>
-                        <button class="export-menu-item" id="exportSVGFromMenu">
-                            <span>🖼️</span>
-                            Export SVG
-                        </button>
-                        <div style="border-top: 1px solid #3a3a3a; margin: 5px 0;"></div>
-                        <button type="button" class="export-menu-item" id="saveTrackFromMenu">
-                            <span>💾</span>
-                            Save Track
-                        </button>
-                        <button type="button" class="export-menu-item" id="loadTrackFromMenu">
-                            <span>📂</span>
-                            Load Track
+                        <button class="dropdown-item" id="exportSVGFromMenu">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-9 7-16 16-16"/><circle cx="4" cy="20" r="2"/><circle cx="20" cy="4" r="2"/></svg>
+                            SVG vector
                         </button>
                     </div>
                 </div>
-                <button class="quick-action primary" id="quickGenerate">
-                    <span>🎯</span>
-                    Generate Track
+                <button class="header-btn panel-toggle" id="panelToggle" title="Settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
                 </button>
             </div>
-        </div>
+        </header>
 
-        <div class="sidebar" id="sidebar">
-            <div class="section">
-                <div class="section-header" data-section="file">
-                    <h2>
-                        <span class="section-icon">📂</span>
-                        SVG File
-                    </h2>
-                    <span class="section-toggle">▼</span>
-                </div>
-                <div class="section-content">
-                    <div class="file-upload" id="fileUpload">
-                        <div class="file-upload-icon">📎</div>
-                        <div class="file-upload-text">Click or drag SVG file here</div>
-                        <div class="file-upload-subtext">Supports .svg files only</div>
-                        <input type="file" id="fileInput" accept=".svg" style="display: none;">
-                    </div>
-                    <div id="fileName" style="margin-top: 12px; font-size: 12px; color: #9ca3af;"></div>
+        <nav class="rail" aria-label="Tools">
+            <button class="tool-btn" id="panMode" title="Pan the view (drag) — scroll to zoom">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3"/></svg>
+                <span>Pan</span>
+            </button>
+            <button class="tool-btn" id="editMode" title="Move segment lines along the track">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h6M6 9l-3 3 3 3M21 12h-6M18 9l3 3-3 3"/></svg>
+                <span>Move</span>
+            </button>
+            <button class="tool-btn" id="curveMode" title="Mark corners and speed limits">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-8a8 8 0 0 1 8-8h8"/><path d="M17 2l3 3-3 3"/></svg>
+                <span>Curves</span>
+            </button>
+            <button class="tool-btn" id="kerbMode" title="Add red and white kerbs">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="2" y="8" width="20" height="8" rx="1"/><path d="M7 8v8M12 8v8M17 8v8" /><path d="M2 8h5v8H2zM12 8h5v8h-5z" fill="currentColor"/></svg>
+                <span>Kerbs</span>
+            </button>
+            <button class="tool-btn" id="whiteLineMode" title="Add white lines along the track edge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 21C3 11 10 4 21 4"/><path d="M8 21c0-7 5-12 13-12" stroke-dasharray="3 3"/></svg>
+                <span>Lines</span>
+            </button>
+            <div class="rail-divider"></div>
+            <button class="tool-btn" id="fitView" title="Fit track to screen">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+                <span>Fit</span>
+            </button>
+        </nav>
+
+        <main class="canvas-area" id="canvasArea">
+            <svg id="trackCanvas" viewBox="0 0 1400 800" preserveAspectRatio="xMidYMid meet">
+                <defs>
+                    <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
+                        <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#34302c" stroke-width="1"/>
+                    </pattern>
+                </defs>
+                <rect x="-5000" y="-5000" width="11400" height="10800" fill="url(#grid)" />
+            </svg>
+
+            <div class="empty-state">
+                <div class="empty-title">Build your <em>own</em> circuit</div>
+                <p class="empty-text">Drop an SVG of your track's centerline here, or upload one from the Track panel. The first path in the file is used as the racing line.</p>
+                <div class="examples">
+                    Try an example:
+                    <button class="chip-btn" data-example="assets/tracks/sevilla.svg">Sevilla</button>
+                    <button class="chip-btn" data-example="assets/tracks/redbullring_smoother.svg">Red Bull Ring</button>
+                    <button class="chip-btn" data-example="assets/tracks/redbullring_sharp_corners.svg">Red Bull Ring (sharp)</button>
                 </div>
             </div>
 
-            <div class="section">
-                <div class="section-header" data-section="settings">
-                    <h2>
-                        <span class="section-icon">⚙️</span>
-                        Track Settings
-                    </h2>
-                    <span class="section-toggle">▼</span>
+            <div class="view-controls">
+                <span id="zoomLevel">Zoom: 100%</span>
+                <div class="mode-hint" id="editControls" style="display: none;" title="Drag a segment line or number along the track to resize the spaces around it.">
+                    <strong>Move</strong>Drag a segment line or number along the track to resize the spaces around it.
                 </div>
-                <div class="section-content">
-                    <div class="form-group">
-                        <label for="trackWidth">Track Width</label>
-                        <input type="number" id="trackWidth" value="200" min="10" max="500" step="10">
+                <div class="mode-hint" id="curveControls" style="display: none;" title="Click a segment line to mark a corner and set its speed limit. Click a number or sign to flip its side.">
+                    <strong>Curves</strong>Click a line to mark a corner. Click a number or sign to flip its side.
+                </div>
+                <div class="mode-hint" id="kerbControls" style="display: none;" title="Click near a track edge to add or remove kerbs on that side.">
+                    <strong>Kerbs</strong>Click near a track edge to add or remove kerbs on that side.
+                </div>
+                <div class="mode-hint" id="whiteLineControls" style="display: none;" title="Click near a track edge to add, remove or switch the white line up to the next corner.">
+                    <strong>Lines</strong>Click near a track edge to add, remove or switch the white line up to the next corner.
+                </div>
+            </div>
+        </main>
+
+        <aside class="panel" id="panel">
+            <div class="tabs" role="tablist">
+                <button class="tab active" data-tab="track" role="tab">Track</button>
+                <button class="tab" data-tab="style" role="tab">Style</button>
+                <button class="tab" data-tab="export" role="tab">Export</button>
+            </div>
+
+            <!-- Track tab -->
+            <div class="tab-panel active" id="tab-track" role="tabpanel">
+                <div class="panel-section">
+                    <div class="section-title"><span class="step-num">1</span> Centerline</div>
+                    <div class="file-upload" id="fileUpload">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>
+                        <div class="file-upload-text">Click or drop an SVG file</div>
+                        <div class="muted">The first path is used as the centerline</div>
+                        <input type="file" id="fileInput" accept=".svg,image/svg+xml" hidden>
                     </div>
-                    <div class="form-group">
-                        <label for="segmentLength">Segment Length</label>
-                        <input type="number" id="segmentLength" value="300" min="10" max="1000" step="25">
+                    <div id="fileName"></div>
+                    <div class="examples">
+                        Examples:
+                        <button class="chip-btn" data-example="assets/tracks/sevilla.svg">Sevilla</button>
+                        <button class="chip-btn" data-example="assets/tracks/redbullring_smoother.svg">Red Bull Ring</button>
+                    </div>
+                </div>
+
+                <div class="panel-section">
+                    <div class="section-title"><span class="step-num">2</span> Spaces</div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="trackWidth">Track width</label>
+                            <input type="number" id="trackWidth" value="200" min="10" max="500" step="10">
+                        </div>
+                        <div class="form-group">
+                            <label for="segmentLength">Space length</label>
+                            <input type="number" id="segmentLength" value="300" min="10" max="1000" step="25">
+                        </div>
                     </div>
                     <button class="btn primary" id="generateBtn">
-                        <span>🎯</span>
-                        Generate Track
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4M5 4h12l-3 4 3 4H5"/></svg>
+                        Generate track
                     </button>
+                    <p class="muted" style="margin-top: 8px;">Units are those of your SVG. Closed loops get evenly sized spaces close to this length.</p>
+                </div>
+
+                <div class="panel-section">
+                    <div class="section-title"><span class="step-num">3</span> Decorate</div>
+                    <div class="tool-guide">
+                        <b>Curves</b><span>Mark corner lines and their speed limits; distance signs count down to each corner.</span>
+                        <b>Move</b><span>Drag lines to resize spaces.</span>
+                        <b>Kerbs</b><span>Add kerbs to either edge.</span>
+                        <b>Lines</b><span>Toggle the white edge lines.</span>
+                    </div>
                 </div>
             </div>
 
-            <div class="section">
-                <div class="section-header" data-section="tools">
-                    <h2>
-                        <span class="section-icon">🛠️</span>
-                        Track Tools
-                    </h2>
-                    <span class="section-toggle">▼</span>
-                </div>
-                <div class="section-content">
-                    <div class="toolbar">
-                        <button class="btn" id="panMode">
-                            <span>✋</span>
-                            Pan
-                        </button>
-                        <button class="btn" id="editMode">
-                            <span>✏️</span>
-                            Edit
-                        </button>
-                        <button class="btn" id="curveMode">
-                            <span>🌀</span>
-                            Curves
-                        </button>
-                        <button class="btn" id="kerbMode">
-                            <span>🏁</span>
-                            Kerbs
-                        </button>
-                        <button class="btn" id="whiteLineMode">
-                            <span>⚪</span>
-                            Lines
-                        </button>
-                    </div>
-                    
-                    <div class="curve-controls" id="curveControls" style="display: none;">
-                        <p>Click a segment line to toggle curve marking. You'll be prompted to select a speed limit when creating curves. Click on numbers to move all numbers for that curve left/right.</p>
-                    </div>
-                    
-                    <div class="curve-controls" id="kerbControls" style="display: none;">
-                        <p><strong>Racing Kerbs</strong><br>
-                        Add red & white striped kerbs to track borders. Click on track borders to add/remove kerbs on that side.</p>
-                    </div>
-                    
-                    <div class="curve-controls" id="whiteLineControls" style="display: none;">
-                        <p><strong>White Lines</strong><br>
-                        Add white lines to track borders (grouped by target curve). Click on track borders to add/remove/switch white lines.</p>
-                    </div>
-                    
-                    <div class="curve-controls" id="editControls" style="display: none;">
-                        <p><strong>Edit Segments</strong><br>
-                        Drag and drop segments to reposition them along the track. Click and drag segment numbers or lines to move them.</p>
-                    </div>
-                </div>
-            </div>
-            <div class="section collapsed">
-                <div class="section-header" data-section="visual">
-                    <h2>
-                        <span class="section-icon">🎨</span>
-                        Visual Settings
-                    </h2>
-                    <span class="section-toggle">▼</span>
-                </div>
-                <div class="section-content">
-                    <div class="settings-group">
-                        <h3>Text Settings</h3>
+            <!-- Style tab -->
+            <div class="tab-panel" id="tab-style" role="tabpanel">
+                <details class="settings-group" open>
+                    <summary>Numbers &amp; signs</summary>
+                    <div class="settings-body form-grid">
                         <div class="form-group">
-                            <label for="segmentNumberSize">Segment Number Size</label>
+                            <label for="segmentNumberSize">Number size</label>
                             <input type="number" id="segmentNumberSize" min="8" max="280" value="38">
                         </div>
                         <div class="form-group">
-                            <label for="segmentNumberOffset">Segment Number Offset</label>
+                            <label for="segmentNumberOffset">Number offset</label>
                             <input type="number" id="segmentNumberOffset" min="0" max="300" value="140">
                         </div>
                         <div class="form-group">
-                            <label for="speedLimitSize">Speed Limit Size</label>
+                            <label for="speedLimitSize">Speed sign size</label>
                             <input type="number" id="speedLimitSize" min="20" max="100" value="64">
                         </div>
                         <div class="form-group">
-                            <label for="speedLimitOffset">Speed Limit Offset</label>
+                            <label for="speedLimitOffset">Speed sign offset</label>
                             <input type="number" id="speedLimitOffset" min="0" max="300" value="230">
                         </div>
                     </div>
-                    
-                    <div class="settings-group">
-                        <h3>Line Settings</h3>
+                </details>
+
+                <details class="settings-group">
+                    <summary>Lines</summary>
+                    <div class="settings-body form-grid">
                         <div class="form-group">
-                            <label for="normalSegmentWidth">Normal Segment Width</label>
+                            <label for="normalSegmentWidth">Space line</label>
                             <input type="number" id="normalSegmentWidth" min="1" max="20" value="8">
                         </div>
                         <div class="form-group">
-                            <label for="curveSegmentWidth">Curve Segment Width</label>
+                            <label for="curveSegmentWidth">Corner line</label>
                             <input type="number" id="curveSegmentWidth" min="5" max="50" value="25">
                         </div>
                         <div class="form-group">
-                            <label for="borderWidth">Border Width</label>
+                            <label for="borderWidth">Border width</label>
                             <input type="number" id="borderWidth" min="1" max="15" value="5">
                         </div>
                         <div class="form-group">
-                            <label for="borderOffset">Border Offset (Multiplier)</label>
+                            <label for="borderOffset">Border offset (×)</label>
                             <input type="number" id="borderOffset" min="0.1" max="5" step="0.1" value="0.9">
                         </div>
                         <div class="form-group">
-                            <label for="centerlineWidth">Centerline Width</label>
+                            <label for="centerlineWidth">Centerline width</label>
                             <input type="number" id="centerlineWidth" min="3" max="20" value="5">
                         </div>
-                    </div>
-                    
-                    <div class="settings-group">
-                        <h3>Centerline Dash</h3>
                         <div class="form-group">
-                            <label for="dashLength">Dash Length</label>
+                            <label for="whiteLineWidth">White line width</label>
+                            <input type="number" id="whiteLineWidth" min="2" max="50" value="12">
+                        </div>
+                        <div class="form-group">
+                            <label for="dashLength">Centerline dash</label>
                             <input type="number" id="dashLength" min="10" max="50" value="20">
                         </div>
                         <div class="form-group">
-                            <label for="gapLength">Gap Length</label>
+                            <label for="gapLength">Centerline gap</label>
                             <input type="number" id="gapLength" min="10" max="50" value="20">
                         </div>
                     </div>
-                    
-                    <div class="settings-group">
-                        <h3>Racing Kerbs</h3>
+                </details>
+
+                <details class="settings-group">
+                    <summary>Kerbs</summary>
+                    <div class="settings-body form-grid">
                         <div class="form-group">
-                            <label for="kerbWidth">Kerb Width</label>
+                            <label for="kerbWidth">Width</label>
                             <input type="number" id="kerbWidth" min="2" max="35" value="12">
                         </div>
                         <div class="form-group">
-                            <label for="kerbDashLength">Kerb Dash Length</label>
+                            <label for="kerbDashLength">Stripe length</label>
                             <input type="number" id="kerbDashLength" min="5" max="30" value="15">
                         </div>
                         <div class="form-group">
-                            <label for="kerbGapLength">Kerb Gap Length</label>
+                            <label for="kerbGapLength">Stripe gap</label>
                             <input type="number" id="kerbGapLength" min="5" max="30" value="10">
                         </div>
                     </div>
-                    
-                    <div class="settings-group">
-                        <h3>White Lines</h3>
-                        <div class="form-group">
-                            <label for="whiteLineWidth">White Line Width</label>
-                            <input type="number" id="whiteLineWidth" min="2" max="50" value="12">
-                        </div>
+                </details>
+
+                <details class="settings-group">
+                    <summary>Colours</summary>
+                    <div class="settings-body color-grid">
+                        <label class="color-field"><input type="color" id="trackFillColor" value="#000000"> Track</label>
+                        <label class="color-field"><input type="color" id="trackBorderColor" value="#ffffff"> Border</label>
+                        <label class="color-field"><input type="color" id="centerlineColor" value="#ffffff"> Centerline</label>
+                        <label class="color-field"><input type="color" id="whiteLineColor" value="#ffffff"> White lines</label>
+                        <label class="color-field"><input type="color" id="segmentNumberColor" value="#ffffff"> Numbers</label>
+                        <label class="color-field"><input type="color" id="kerbRedColor" value="#9f1717"> Kerb red</label>
+                        <label class="color-field"><input type="color" id="kerbWhiteColor" value="#ffffff"> Kerb white</label>
                     </div>
-                    
-                    <div class="settings-group">
-                        <h3>Colors</h3>
-                        <div class="form-group">
-                            <label for="trackFillColor">Track Fill</label>
-                            <input type="color" id="trackFillColor" value="#000000">
-                        </div>
-                        <div class="form-group">
-                            <label for="trackBorderColor">Track Border</label>
-                            <input type="color" id="trackBorderColor" value="#ffffff">
-                        </div>
-                        <div class="form-group">
-                            <label for="centerlineColor">Centerline</label>
-                            <input type="color" id="centerlineColor" value="#ffffff">
-                        </div>
-                        <div class="form-group">
-                            <label for="whiteLineColor">White Lines</label>
-                            <input type="color" id="whiteLineColor" value="#ffffff">
-                        </div>
-                        <div class="form-group">
-                            <label for="segmentNumberColor">Segment Numbers</label>
-                            <input type="color" id="segmentNumberColor" value="#ffffff">
-                        </div>
-                        <div class="form-group">
-                            <label for="speedLimitColor">Speed Limits</label>
-                            <input type="color" id="speedLimitColor" value="#ffff00">
-                        </div>
-                        <div class="form-group">
-                            <label for="kerbWhiteColor">Kerb White</label>
-                            <input type="color" id="kerbWhiteColor" value="#ffffff">
-                        </div>
-                        <div class="form-group">
-                            <label for="kerbRedColor">Kerb Red</label>
-                            <input type="color" id="kerbRedColor" value="#9f1717">
-                        </div>
-                    </div>
-                    
-                    <div class="settings-buttons">
-                        <button class="btn secondary" id="saveSettings">
-                            <span>💾</span>
-                            Save
-                        </button>
-                        <button class="btn secondary" id="loadSettings">
-                            <span>📂</span>
-                            Load
-                        </button>
-                        <button class="btn warning" id="resetSettings">
-                            <span>🔄</span>
-                            Reset
-                        </button>
-                    </div>
+                </details>
+
+                <div class="settings-actions btn-row">
+                    <button class="btn small" id="saveSettings" title="Remember these settings in this browser">Save</button>
+                    <button class="btn small" id="loadSettings" title="Go back to the last saved settings">Revert</button>
+                    <button class="btn small danger" id="resetSettings" title="Restore the default settings">Reset</button>
                 </div>
             </div>
 
-            <div class="section">
-                <div class="section-header" data-section="export">
-                    <h2>
-                        <span class="section-icon">💾</span>
-                        Export
-                    </h2>
-                    <span class="section-toggle">▼</span>
-                </div>
-                <div class="section-content">
+            <!-- Export tab -->
+            <div class="tab-panel" id="tab-export" role="tabpanel">
+                <div class="panel-section">
+                    <div class="section-title">Image</div>
                     <div class="form-group">
-                        <label for="exportWidth">PNG Width (px)</label>
+                        <label for="exportWidth">PNG width (px)</label>
                         <input type="number" id="exportWidth" value="4000" min="500" max="16000" step="500">
                     </div>
-                    <button class="btn success" id="exportPNG">
-                        <span>📷</span>
-                        Export PNG
-                    </button>
-                    <button class="btn success" id="exportSVG">
-                        <span>🖼️</span>
-                        Export SVG
-                    </button>
-                    <button type="button" class="btn primary" id="saveTrack">
-                        <span>💾</span>
-                        Save Track
-                    </button>
-                    <button type="button" class="btn primary" id="loadTrack">
-                        <span>📂</span>
-                        Load Track
-                    </button>
-                    <input type="file" id="trackFileInput" accept=".json" style="display: none;">
+                    <div class="btn-stack">
+                        <button class="btn primary" id="exportPNG">Export PNG</button>
+                        <button class="btn" id="exportSVG">Export SVG</button>
+                    </div>
+                    <p class="muted" style="margin-top: 8px;">Exports always contain the whole track with a transparent background, whatever the current zoom.</p>
                 </div>
-            </div>
 
-            <div class="section">
-                <div class="section-header" data-section="session">
-                    <h2>
-                        <span class="section-icon">🗑️</span>
-                        Session
-                    </h2>
-                    <span class="section-toggle">▼</span>
+                <div class="panel-section">
+                    <div class="section-title">Project file</div>
+                    <div class="btn-row">
+                        <button type="button" class="btn teal" id="saveTrack">Save track</button>
+                        <button type="button" class="btn" id="loadTrack">Open track</button>
+                    </div>
+                    <input type="file" id="trackFileInput" accept=".json,application/json" hidden>
+                    <p class="muted" style="margin-top: 8px;">Saves curves, kerbs, lines and style to a .json file you can reopen or share.</p>
                 </div>
-                <div class="section-content">
-                    <button class="btn danger" id="clearSession">
-                        <span>🗑️</span>
-                        Clear Session
-                    </button>
-                    <p style="font-size: 12px; color: #9ca3af; margin-top: 8px;">
-                        Clears saved map and view data
-                    </p>
-                </div>
-            </div>
-        </div>
 
-        <div class="main-content">
-            <div class="canvas-container">
-                <svg id="trackCanvas" viewBox="0 0 1400 800" preserveAspectRatio="xMidYMid meet">
-                    <defs>
-                        <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
-                            <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#2a2a2a" stroke-width="1"/>
-                        </pattern>
-                    </defs>
-                    <rect width="100%" height="100%" fill="url(#grid)" />
-                    <text x="50%" y="50%" text-anchor="middle" fill="#6b7280" font-size="18" font-family="Inter, sans-serif">
-                        Upload an SVG file to get started
-                    </text>
-                </svg>
-            </div>
-            
-            <div class="canvas-overlay">
-                <div class="canvas-control">
-                    <span>🔍</span>
-                    <span id="zoomLevel">Zoom: 100%</span>
-                </div>
-                <div class="canvas-control" id="coordinatesDisplay" style="display: none;">
-                    <span>📍</span>
-                    <span id="coordinates">0, 0</span>
+                <div class="panel-section">
+                    <div class="section-title">Session</div>
+                    <button class="btn danger" id="clearSession">Clear session</button>
+                    <p class="muted" style="margin-top: 8px;">Your work is kept in this browser automatically. Clearing removes it.</p>
                 </div>
             </div>
-        </div>
+        </aside>
     </div>
 
-    <div class="mobile-overlay" id="mobileOverlay"></div>
-    <div class="status" id="status"></div>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
     <div class="loading" id="loading">
         <div class="spinner"></div>
-        <p>Processing...</p>
+        Working…
     </div>
 
     <script src="src/track-generator.js"></script>
     <script>
-        // Sidebar functionality
         document.addEventListener('DOMContentLoaded', function() {
-            const sidebarToggle = document.getElementById('sidebarToggle');
-            const sidebar = document.getElementById('sidebar');
-            const container = document.getElementById('container');
-            const mobileOverlay = document.getElementById('mobileOverlay');
-            const exportDropdownBtn = document.getElementById('exportDropdownBtn');
             const exportMenu = document.getElementById('exportMenu');
-            
-            // Sidebar toggle
-            sidebarToggle.addEventListener('click', function() {
-                if (window.innerWidth <= 768) {
-                    sidebar.classList.toggle('mobile-open');
-                    mobileOverlay.classList.toggle('active');
-                } else {
-                    container.classList.toggle('sidebar-collapsed');
-                    sidebar.classList.toggle('collapsed');
-                }
+            const panel = document.getElementById('panel');
+
+            // Panel tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
+                    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${tab.dataset.tab}`));
+                });
             });
-            
-            // Mobile overlay click
-            mobileOverlay.addEventListener('click', function() {
-                sidebar.classList.remove('mobile-open');
-                mobileOverlay.classList.remove('active');
-            });
-            
-            // Export dropdown functionality
-            exportDropdownBtn.addEventListener('click', function(e) {
+
+            // Settings panel slides in on small screens
+            document.getElementById('panelToggle').addEventListener('click', () => panel.classList.toggle('open'));
+
+            // Export dropdown
+            document.getElementById('exportDropdownBtn').addEventListener('click', e => {
                 e.stopPropagation();
                 exportMenu.classList.toggle('show');
             });
-            
-            // Close dropdown when clicking outside
-            document.addEventListener('click', function() {
+            document.addEventListener('click', () => exportMenu.classList.remove('show'));
+            window.addEventListener('resize', () => exportMenu.classList.remove('show'));
+
+            // Header shortcuts reuse the panel buttons
+            const proxy = (from, to) => document.getElementById(from).addEventListener('click', () => {
                 exportMenu.classList.remove('show');
+                document.getElementById(to).click();
             });
-            
-            // Prevent dropdown from closing when clicking inside
-            exportMenu.addEventListener('click', function(e) {
-                e.stopPropagation();
-            });
-            
-            // Export menu actions
-            document.getElementById('exportPNGFromMenu').addEventListener('click', function() {
-                exportMenu.classList.remove('show');
-                document.getElementById('exportPNG').click();
-            });
-            
-            document.getElementById('exportSVGFromMenu').addEventListener('click', function() {
-                exportMenu.classList.remove('show');
-                document.getElementById('exportSVG').click();
-            });
-            
-            document.getElementById('saveTrackFromMenu').addEventListener('click', function(e) {
-                e.preventDefault(); // Prevent any default behavior
-                exportMenu.classList.remove('show');
-                document.getElementById('saveTrack').click();
-            });
-            
-            document.getElementById('loadTrackFromMenu').addEventListener('click', function(e) {
-                e.preventDefault(); // Prevent any default behavior
-                exportMenu.classList.remove('show');
-                document.getElementById('loadTrack').click();
-            });
-            
-            // Section collapsing
-            document.querySelectorAll('.section-header').forEach(header => {
-                header.addEventListener('click', function() {
-                    const section = this.parentElement;
-                    section.classList.toggle('collapsed');
-                });
-            });
-            
-            // Quick actions
-            document.getElementById('quickGenerate').addEventListener('click', function() {
-                document.getElementById('generateBtn').click();
-            });
-            
-            // Handle window resize
-            window.addEventListener('resize', function() {
-                if (window.innerWidth > 768) {
-                    sidebar.classList.remove('mobile-open');
-                    mobileOverlay.classList.remove('active');
-                }
-                // Close export menu on resize
-                exportMenu.classList.remove('show');
-            });
+            proxy('exportPNGFromMenu', 'exportPNG');
+            proxy('exportSVGFromMenu', 'exportSVG');
+            proxy('headerSave', 'saveTrack');
+            proxy('headerLoad', 'loadTrack');
         });
     </script>
 </body>
